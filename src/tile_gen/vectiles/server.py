@@ -162,10 +162,11 @@ class Provider:
         self.columns = {}
 
         for query in queries:
-            try:
-                query = util.open(query).read()
-            except IOError:
-                pass
+            if query:
+                try:
+                    query = util.open(query).read()
+                except IOError:
+                    pass
 
             self.queries.append(query)
 
