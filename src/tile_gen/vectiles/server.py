@@ -12,22 +12,12 @@ from urllib import urlopen
 from os.path import exists
 from shapely.wkb import dumps
 from shapely.wkb import loads
-
 import json
 from tile_gen.core import KnownUnknown
 from tile_gen.config import loadClassPath
-
-try:
-    from psycopg2.extras import RealDictCursor
-    from psycopg2 import connect
-    from psycopg2.extensions import TransactionRollbackError
-
-except ImportError, err:
-    # Still possible to build the documentation without psycopg2
-
-    def connect(*args, **kwargs):
-        raise err
-
+from psycopg2.extras import RealDictCursor
+from psycopg2 import connect
+from psycopg2.extensions import TransactionRollbackError
 import tile_gen.vectiles.mvt as mvt
 import tile_gen.vectiles.geojson as geojson
 import tile_gen.vectiles.topojson as topojson
@@ -35,7 +25,6 @@ from tile_gen.geography import SphericalMercator
 from ModestMaps.Core import Point
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
-
 
 def make_transform_fn(transform_fns):
     if not transform_fns:
@@ -46,7 +35,6 @@ def make_transform_fn(transform_fns):
             shape, properties, fid = fn(shape, properties, fid)
         return shape, properties, fid
     return transform_fn
-
 
 def resolve_transform_fns(fn_dotted_names):
     if not fn_dotted_names:

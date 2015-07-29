@@ -10,8 +10,10 @@ import tile_gen.config as config
 def open(filename):
     for path in sys.path:
         path = os.path.join(path, filename)
+        print(path)
         if os.path.exists(path):
             return __builtin__.open(path)
+    raise IOError('File not found: ' + filename)
 
 def parse_config_file(configpath):
     """ Parse a configuration file and return a Configuration object.
