@@ -49,13 +49,6 @@ def parse_config_file(configpath):
 
     return config.buildConfiguration(config_dict, dirpath)
 
-def unknown_layer_message(config, unknown_layername):
-    """ A message that notifies that the given layer is unknown and lists out the known layers. """
-
-    return '"%s" is not a layer I know about. \n' + \
-           'Here are some that I do know about: \n %s.' % \
-           (unknown_layername, '\n '.join(sorted(config.layers.keys())))
-
 def get_tile(layer, z, x, y, ext):
    """ Get a type string and tile binary for a given request layer tile. """
 
@@ -63,7 +56,7 @@ def get_tile(layer, z, x, y, ext):
 
    # maybe do some other config checks as before
    if layer not in config.layers:
-       raise core.KnownUnknown(unknownLayerMessage(config, layer))
+       raise IOError("Layer not found: " + layer)
 
    tile = config.layers[layer].getTileResponse(Coordinate(x, y, z), ext, False, False)
    return tile

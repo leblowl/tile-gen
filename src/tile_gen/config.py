@@ -119,9 +119,9 @@ class Configuration:
 
         # adding custom_layer to extend multiprovider to support comma separated layernames
         self.custom_layer_name = ","
-        self.custom_layer_dict = {'provider': {'class': 'TileStache.Goodies.VecTiles:MultiProvider', 'kwargs': {'names': []}}}
+        self.custom_layer_dict = {'provider': {'class': 'tile_gen.vectiles.server.MultiProvider', 'kwargs': {'names': []}}}
 
-        self.index = 'text/plain', 'TileStache bellows hello.'
+        self.index = 'text/plain', 'tile-gen bellows hello.'
 
 class Bounds:
     """ Coordinate bounding box for tiles.

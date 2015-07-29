@@ -3,15 +3,13 @@ import mapbox_vector_tile
 # coordindates are scaled to this range within tile
 extents = 4096
 
-# tiles are padded by this number of pixels for the current zoom level 
+# tiles are padded by this number of pixels for the current zoom level
 padding = 0
-
 
 def decode(file):
     tile = file.read()
     data = mapbox_vector_tile.decode(tile)
     return data # print data or write to file?
-
 
 def encode(file, features, coord, layer_name=''):
     layers = []
@@ -20,7 +18,6 @@ def encode(file, features, coord, layer_name=''):
 
     data = mapbox_vector_tile.encode(layers)
     file.write(data)
-
 
 def merge(file, feature_layers, coord):
     '''
@@ -35,7 +32,6 @@ def merge(file, feature_layers, coord):
 
     data = mapbox_vector_tile.encode(layers)
     file.write(data)
-
 
 def get_feature_layer(name, features):
     _features = []

@@ -18,7 +18,7 @@ from tile_gen.config import loadClassPath
 from psycopg2.extras import RealDictCursor
 from psycopg2 import connect
 from psycopg2.extensions import TransactionRollbackError
-import tile_gen.vectiles.mvt as mvt
+import tile_gen.vectiles.mvt
 import tile_gen.vectiles.geojson as geojson
 import tile_gen.vectiles.topojson as topojson
 from tile_gen.geography import SphericalMercator
