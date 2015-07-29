@@ -4,6 +4,7 @@ from ModestMaps.Core import Coordinate
 import os
 import sys
 import json
+import __builtin__
 import tile_gen.core as core
 import tile_gen.config as config
 
