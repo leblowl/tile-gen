@@ -6,23 +6,25 @@ precision reduced and often clipped.
 For a more general implementation, try the Vector provider:
     http://tilestache.org/doc/#vector-provider
 '''
+
+import json
+import tile_gen.util as util
+import tile_gen.vectiles.mvt as mvt
+import tile_gen.vectiles.geojson as geojson
+import tile_gen.vectiles.topojson as topojson
 from math import pi
 from urlparse import urljoin, urlparse
 from urllib import urlopen
 from os.path import exists
 from shapely.wkb import dumps
 from shapely.wkb import loads
-import json
-from tile_gen.core import KnownUnknown
-from tile_gen.config import loadClassPath
 from psycopg2.extras import RealDictCursor
 from psycopg2 import connect
 from psycopg2.extensions import TransactionRollbackError
-import tile_gen.vectiles.mvt as mvt
-import tile_gen.vectiles.geojson as geojson
-import tile_gen.vectiles.topojson as topojson
-from tile_gen.geography import SphericalMercator
 from ModestMaps.Core import Point
+from tile_gen.geography import SphericalMercator
+from tile_gen.core import KnownUnknown
+from tile_gen.config import loadClassPath
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
@@ -160,21 +162,10 @@ class Provider:
         self.columns = {}
 
         for query in queries:
-            if query is None:
-                self.queries.append(None)
-                continue
-
-            #
-            # might be a file or URL?
-            #
-            url = urljoin(layer.config.dirpath, query)
-            scheme, h, path, p, q, f = urlparse(url)
-
-            if scheme in ('file', '') and exists(path):
-                query = open(path).read()
-
-            elif scheme == 'http' and ' ' not in url:
-                query = urlopen(url).read()
+            try:
+                query = util.open(query).read()
+            except IOError:
+                pass
 
             self.queries.append(query)
 

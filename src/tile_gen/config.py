@@ -60,6 +60,10 @@ documentation for TileStache.Providers, TileStache.Core, and TileStache.Geograph
 
 import sys
 import logging
+import tile_gen.core as core
+import tile_gen.caches as caches
+import tile_gen.providers as providers
+import tile_gen.geography as geography
 from sys import stderr, modules
 from os.path import realpath, join as pathjoin
 from urlparse import urljoin, urlparse
@@ -68,10 +72,6 @@ from urllib import urlopen
 from json import dumps
 from ModestMaps.Geo import Location
 from ModestMaps.Core import Coordinate
-import tile_gen.core as core
-import tile_gen.caches as caches
-import tile_gen.providers as providers
-import tile_gen.geography as geography
 
 class Configuration:
     """ A complete site configuration, with a collection of Layer objects.
@@ -192,7 +192,7 @@ class BoundsList:
         # Nothing worked.
         return True
 
-def buildConfiguration(config_dict, dirpath='.'):
+def build_config(config_dict, dirpath='.'):
     """ Build a configuration dictionary into a Configuration object.
 
         The second argument is an optional dirpath that specifies where in the

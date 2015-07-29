@@ -1,20 +1,8 @@
-from os.path import dirname, join as pathjoin, realpath
-from urlparse import urlparse
-from ModestMaps.Core import Coordinate
-import os
-import sys
 import json
-import __builtin__
 import tile_gen.core as core
 import tile_gen.config as config
-
-def open(filename):
-    for path in sys.path:
-        path = os.path.join(path, filename)
-        print(path)
-        if os.path.exists(path):
-            return __builtin__.open(path)
-    raise IOError('File not found: ' + filename)
+import tile_gen.util as util
+from ModestMaps.Core import Coordinate
 
 def parse_config_file(configpath):
     """ Parse a configuration file and return a Configuration object.
@@ -38,24 +26,15 @@ def parse_config_file(configpath):
         "layers" section.
     """
 
-    config_dict = json.load(open(configpath))
-
-    scheme, host, path, p, q, f = urlparse(configpath)
-
-    if scheme == '':
-        scheme = 'file'
-        path = realpath(path)
-
-    dirpath = '%s://%s%s' % (scheme, host, dirname(path).rstrip('/') + '/')
-
-    return config.buildConfiguration(config_dict, dirpath)
+    config_dict = json.load(util.open(configpath))
+    return config.build_config(config_dict)
 
 def get_tile(layer, z, x, y, ext):
    """ Get a type string and tile binary for a given request layer tile. """
 
    config = parse_config_file("tilestache.cfg")
 
-   # maybe do some other config checks as before
+   # maybe do some other config checks as before ...
    if layer not in config.layers:
        raise IOError("Layer not found: " + layer)
 
