@@ -67,29 +67,14 @@ For an example of a non-image provider, see TileStache.Vector.Provider.
 
 import os
 import logging
-
 from StringIO import StringIO
 from string import Template
 import urllib2
 import urllib
-
-try:
-    from PIL import Image
-except ImportError:
-    # On some systems, PIL.Image is known as Image.
-    import Image
-
+from PIL import Image
 import ModestMaps
 from ModestMaps.Core import Point, Coordinate
-
-import Geography
-
-# This import should happen inside getProviderByName(), but when testing
-# on Mac OS X features are missing from output. Wierd-ass C libraries...
-try:
-    import Vector
-except ImportError:
-    pass
+import tile_gen.geography
 
 def getProviderByName(name):
     """ Retrieve a provider object by name.

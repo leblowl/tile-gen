@@ -10,7 +10,7 @@ vector data in spherical mercator projection, providing for rendering of data
 without the use of a local PostGIS database.
 
 Sample usage in Mapnik configuration XML:
-    
+
  <Layer name="test" srs="+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs">
      <StyleName>...</StyleName>
      <Datasource>
@@ -48,5 +48,5 @@ a remote URL containing a query for zoom 11, and a local file for zooms 12+:
   }
 '''
 
-from .server import Provider, MultiProvider
-from .client import Datasource
+from tile_gen.vectiles.server import Provider, MultiProvider
+from tile_gen.vectiles.client import Datasource

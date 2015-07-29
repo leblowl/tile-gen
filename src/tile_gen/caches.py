@@ -51,11 +51,9 @@ import os
 import sys
 import time
 import gzip
-
 from tempfile import mkstemp
 from os.path import isdir, exists, dirname, basename, join as pathjoin
-
-from Core import KnownUnknown
+from tile_gen.core import KnownUnknown
 
 def getCacheByName(name):
     """ Retrieve a cache object by name.

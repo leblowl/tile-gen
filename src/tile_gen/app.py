@@ -1,9 +1,17 @@
 from os.path import dirname, join as pathjoin, realpath
 from urlparse import urlparse
 from ModestMaps.Core import Coordinate
+import os
+import sys
 import json
-import Core
-import Config
+import tile_gen.core as core
+import tile_gen.config as config
+
+def open(filename):
+    for path in sys.path:
+        path = os.path.join(path, filename)
+        if os.path.exists(path):
+            return __builtin__.open(path)
 
 def parse_config_file(configpath):
     """ Parse a configuration file and return a Configuration object.
@@ -37,7 +45,7 @@ def parse_config_file(configpath):
 
     dirpath = '%s://%s%s' % (scheme, host, dirname(path).rstrip('/') + '/')
 
-    return Config.buildConfiguration(config_dict, dirpath)
+    return config.buildConfiguration(config_dict, dirpath)
 
 def unknown_layer_message(config, unknown_layername):
     """ A message that notifies that the given layer is unknown and lists out the known layers. """
@@ -53,7 +61,7 @@ def get_tile(layer, z, x, y, ext):
 
    # maybe do some other config checks as before
    if layer not in config.layers:
-       raise Core.KnownUnknown(unknownLayerMessage(config, layer))
+       raise core.KnownUnknown(unknownLayerMessage(config, layer))
 
    tile = config.layers[layer].getTileResponse(Coordinate(x, y, z), ext, False, False)
    return tile
