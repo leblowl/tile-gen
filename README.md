@@ -5,6 +5,5 @@ This repo uses a stripped down copy of [mapzen/TileStache](https://github.com/ma
 
 ## Usage 
 ```shell
-git clone https://github.com/leblowl/tile-gen
-cd tile-gen
-pip install .
+pip install git+https://github.com/leblowl/tile-gen#egg=tile-gen
+```
