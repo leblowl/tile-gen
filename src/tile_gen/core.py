@@ -134,7 +134,6 @@ The preview can be accessed through a URL like /<layer name>/preview.html:
 """
 
 import logging
-from wsgiref.headers import Headers
 from StringIO import StringIO
 from urlparse import urljoin
 from time import time
@@ -347,68 +346,46 @@ class Layer:
 
         return None
 
-    def getTileResponse(self, coord, extension, ignore_cached=False, suppress_cache_write=False):
-        """ Get status code, headers, and a tile binary for a given request layer tile.
+    def get_tile(self, coord, extension, ignore_cached=False, suppress_cache_write=False):
+        """ Get type and tile binary for a given request layer tile.
 
             Arguments:
             - coord: one ModestMaps.Core.Coordinate corresponding to a single tile.
             - extension: filename extension to choose response type, e.g. "png" or "jpg".
             - ignore_cached: always re-render the tile, whether it's in the cache or not.
             - suppress_cache_write: don't save the tile to the cache
-
-            This is the main entry point, after site configuration has been loaded
-            and individual tiles need to be rendered.
         """
-        start_time = time()
 
+        start_time = time()
+        cache = self.config.cache
         mimetype, format = self.getTypeByExtension(extension)
 
-        # default response values
-        status_code = 200
-        headers = Headers([('Content-Type', mimetype)])
-        body = None
-
-        cache = self.config.cache
-
-        if not ignore_cached:
-            # Start by checking for a tile in the cache.
+        if ignore_cached:
+            body = _getRecentTile(self, coord, format)
+            orig = 'recent'
+        else:
             try:
                 body = cache.read(self, coord, format)
             except TheTileLeftANote, e:
-                headers = e.headers
-                status_code = e.status_code
                 body = e.content
+            orig = 'cache'
 
-                if e.emit_content_type:
-                    headers.setdefault('Content-Type', mimetype)
-
-            tile_from = 'cache'
-
-        else:
-            # Then look in the bag of recent tiles.
-            body = _getRecentTile(self, coord, format)
-            tile_from = 'recent tiles'
-
-        # If no tile was found, dig deeper
         if body is None:
             try:
                 lockCoord = None
 
                 if (not suppress_cache_write) and self.write_cache:
-                    # this is the coordinate that actually gets locked.
-                    lockCoord = self.metatile.firstCoord(coord)
-
                     # We may need to write a new tile, so acquire a lock.
+                    lockCoord = self.metatile.firstCoord(coord)
                     cache.lock(self, lockCoord, format)
 
                 if not ignore_cached:
                     # There's a chance that some other process has
                     # written the tile while the lock was being acquired.
                     body = cache.read(self, coord, format)
-                    tile_from = 'cache after all'
+                    orig = 'cache'
 
                 if body is None:
-                    # No one else wrote the tile, do it here.
                     buff = StringIO()
 
                     try:
@@ -421,28 +398,16 @@ class Layer:
                     if suppress_cache_write or (not self.write_cache):
                         save = False
 
-                    if format.lower() == 'jpeg':
-                        save_kwargs = self.jpeg_options
-                    elif format.lower() == 'png':
-                        save_kwargs = self.png_options
-                    else:
-                        save_kwargs = {}
+                    save_kwargs = {}
 
                     tile.save(buff, format, **save_kwargs)
                     body = buff.getvalue()
 
-                    if save:
-                        cache.save(body, self, coord, format)
-
-                    tile_from = 'layer.render()'
+                    if save: cache.save(body, self, coord, format)
+                    orig = 'rendered'
 
             except TheTileLeftANote, e:
-                headers = e.headers
-                status_code = e.status_code
                 body = e.content
-
-                if e.emit_content_type:
-                    headers.setdefault('Content-Type', mimetype)
 
             finally:
                 if lockCoord:
@@ -450,9 +415,10 @@ class Layer:
                     cache.unlock(self, lockCoord, format)
 
         _addRecentTile(self, coord, format, body)
-        logging.info('TileStache.Core.Layer.getTileResponse() %s/%d/%d/%d.%s via %s in %.3f', self.name(), coord.zoom, coord.column, coord.row, extension, tile_from, time() - start_time)
+        logging.info('TileStache.Core.Layer.getTileResponse() %s/%d/%d/%d.%s via %s in %.3f',
+                     self.name(), coord.zoom, coord.column, coord.row, extension, tile_from, time() - start_time)
 
-        return status_code, headers, body
+        return mimetype, body
 
     def doMetatile(self):
         """ Return True if we have a real metatile and the provider is OK with it.
@@ -692,7 +658,7 @@ class TheTileLeftANote(Exception):
         is empty (or solid).
     """
     def __init__(self, headers=None, status_code=200, content='', emit_content_type=True):
-        self.headers = headers or Headers([])
+        self.headers = headers
         self.status_code = status_code
         self.content = content
         self.emit_content_type = bool(emit_content_type)
