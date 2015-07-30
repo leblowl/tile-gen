@@ -416,7 +416,7 @@ class Layer:
 
         _addRecentTile(self, coord, format, body)
         logging.info('TileStache.Core.Layer.getTileResponse() %s/%d/%d/%d.%s via %s in %.3f',
-                     self.name(), coord.zoom, coord.column, coord.row, extension, tile_from, time() - start_time)
+                     self.name(), coord.zoom, coord.column, coord.row, extension, orig, time() - start_time)
 
         return mimetype, body
 
