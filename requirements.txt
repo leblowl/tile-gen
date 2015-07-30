@@ -1,7 +1,0 @@
-mapbox-vector-tile==0.0.10
-ModestMaps==1.4.6
-Pillow==2.9.0
-protobuf==2.6.1
-psycopg2==2.6.1
-Shapely==1.5.9
-StreetNames==0.1.5
