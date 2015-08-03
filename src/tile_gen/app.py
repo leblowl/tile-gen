@@ -38,5 +38,5 @@ def get_tile(layer, z, x, y, ext):
    if layer not in config.layers:
        raise IOError("Layer not found: " + layer)
 
-   tile = config.layers[layer].get_tile(Coordinate(x, y, z), ext, False, False)
+   tile = config.layers[layer].get_tile(Coordinate(y, x, z), ext, False, False)
    return tile
