@@ -21,12 +21,8 @@ configuration file as a dictionary:
           "cache lifespan": ...,
           "write cache": ...,
           "bounds": { ... },
-          "allowed origin": ...,
           "maximum cache age": ...,
-          "redirects": ...,
-          "tile height": ...,
-          "jpeg options": ...,
-          "png options": ...
+          "tile height": ...
         }
       }
     }
@@ -52,46 +48,13 @@ configuration file as a dictionary:
 - "bounds" is an optional dictionary of six tile boundaries to limit the
   rendered area: low (lowest zoom level), high (highest zoom level), north,
   west, south, and east (all in degrees).
-- "allowed origin" is an optional string that shows up in the response HTTP
-  header Access-Control-Allow-Origin, useful for when you need to provide
-  javascript direct access to response data such as GeoJSON or pixel values.
-  The header is part of a W3C working draft (http://www.w3.org/TR/cors/).
 - "maximum cache age" is an optional number of seconds used to control behavior
   of downstream caches. Causes TileStache responses to include Cache-Control
   and Expires HTTP response headers. Useful when TileStache is itself hosted
   behind an HTTP cache such as Squid, Cloudfront, or Akamai.
-- "redirects" is an optional dictionary of per-extension HTTP redirects,
-  treated as lowercase. Useful in cases where your tile provider can support
-  many formats but you want to enforce limits to save on cache usage.
-  If a request is made for a tile with an extension in the dictionary keys,
-  a response can be generated that redirects the client to the same tile
-  with another extension.
 - "tile height" gives the height of the image tile in pixels. You almost always
   want to leave this at the default value of 256, but you can use a value of 512
   to create double-size, double-resolution tiles for high-density phone screens.
-- "jpeg options" is an optional dictionary of JPEG creation options, passed
-  through to PIL: http://effbot.org/imagingbook/format-jpeg.htm.
-- "png options" is an optional dictionary of PNG creation options, passed
-  through to PIL: http://effbot.org/imagingbook/format-png.htm.
-
-The public-facing URL of a single tile for this layer might look like this:
-
-    http://example.com/tilestache.cgi/example-name/0/0/0.png
-
-Sample JPEG creation options:
-
-    {
-      "quality": 90,
-      "progressive": true,
-      "optimize": true
-    }
-
-Sample PNG creation options:
-
-    {
-      "optimize": true,
-      "palette": "filename.act"
-    }
 
 Sample bounds:
 
@@ -118,33 +81,13 @@ represented in the configuration file as a dictionary:
   bit extra around the edges to ensure that text is not cut off. This example
   metatile has a buffer of 64 pixels, so the resulting metatile will be 1152
   pixels square: 4 rows x 256 pixels + 2 x 64 pixel buffer.
-
-The preview can be accessed through a URL like /<layer name>/preview.html:
-
-    {
-      "lat": 33.9901,
-      "lon": -116.1637,
-      "zoom": 16,
-      "ext": "jpg"
-    }
-
-- "lat" and "lon" are the starting latitude and longitude in degrees.
-- "zoom" is the starting zoom level.
-- "ext" is the filename extension, e.g. "png".
 """
 
 import logging
 from StringIO import StringIO
 from urlparse import urljoin
 from time import time
-
-from pixels import load_palette, apply_palette, apply_palette256
-
-try:
-    from PIL import Image
-except ImportError:
-    import Image
-
+import Image
 from ModestMaps.Core import Coordinate
 
 _recent_tiles = dict(hash={}, list=[])
@@ -283,56 +226,25 @@ class Layer:
           bounds:
             Instance of Config.Bounds for limiting rendered tiles.
 
-          allowed_origin:
-            Value for the Access-Control-Allow-Origin HTTP response header.
-
           max_cache_age:
             Number of seconds that tiles from this layer may be cached by downstream clients.
-
-          redirects:
-            Dictionary of per-extension HTTP redirects, treated as lowercase.
-
-          preview_lat:
-            Starting latitude for slippy map layer preview, default 37.80.
-
-          preview_lon:
-            Starting longitude for slippy map layer preview, default -122.26.
-
-          preview_zoom:
-            Starting zoom for slippy map layer preview, default 10.
-
-          preview_ext:
-            Tile name extension for slippy map layer preview, default "png".
 
           tile_height:
             Height of tile in pixels, as a single integer. Tiles are generally
             assumed to be square, and Layer.render() will respond with an error
             if the rendered image is not this height.
     """
-    def __init__(self, config, projection, metatile, stale_lock_timeout=15, cache_lifespan=None, write_cache=True, allowed_origin=None, max_cache_age=None, redirects=None, preview_lat=37.80, preview_lon=-122.26, preview_zoom=10, preview_ext='png', bounds=None, tile_height=256):
+    def __init__(self, config, projection, metatile, cache_lifespan=None, stale_lock_timeout=15, write_cache=True, max_cache_age=None, bounds=None, tile_height=256):
         self.provider = None
         self.config = config
         self.projection = projection
         self.metatile = metatile
-
         self.stale_lock_timeout = stale_lock_timeout
         self.cache_lifespan = cache_lifespan
         self.write_cache = write_cache
-        self.allowed_origin = allowed_origin
         self.max_cache_age = max_cache_age
-        self.redirects = redirects or dict()
-
-        self.preview_lat = preview_lat
-        self.preview_lon = preview_lon
-        self.preview_zoom = preview_zoom
-        self.preview_ext = preview_ext
-
         self.bounds = bounds
         self.dim = tile_height
-
-        self.bitmap_palette = None
-        self.jpeg_options = {}
-        self.png_options = {}
 
     def name(self):
         """ Figure out what I'm called, return a name if there is one.
@@ -351,7 +263,7 @@ class Layer:
 
             Arguments:
             - coord: one ModestMaps.Core.Coordinate corresponding to a single tile.
-            - extension: filename extension to choose response type, e.g. "png" or "jpg".
+            - extension: filename extension to choose response type, e.g. "mvt"".
             - ignore_cached: always re-render the tile, whether it's in the cache or not.
             - suppress_cache_write: don't save the tile to the cache
         """
@@ -475,16 +387,6 @@ class Layer:
         if hasattr(tile, 'size') and tile.size[1] != height:
             raise KnownUnknown('Your provider returned the wrong image size: %s instead of %d pixels tall.' % (repr(tile.size), self.dim))
 
-        if self.bitmap_palette:
-            # this is where we apply the palette if there is one
-
-            if pass_through:
-                raise KnownUnknown('Cannot apply palette in pass_through mode')
-
-            if format.lower() == 'png':
-                t_index = self.png_options.get('transparency', None)
-                tile = apply_palette(tile, self.bitmap_palette, t_index)
-
         if self.doMetatile():
             # tile will be set again later
             tile, surtile = None, tile
@@ -493,10 +395,6 @@ class Layer:
                 buff = StringIO()
                 bbox = (x, y, x + self.dim, y + self.dim)
                 subtile = surtile.crop(bbox)
-                if self.palette256:
-                    # this is where we have PIL optimally palette our image
-                    subtile = apply_palette256(subtile)
-
                 subtile.save(buff, format)
                 body = buff.getvalue()
 
@@ -574,56 +472,8 @@ class Layer:
         """
         if hasattr(self.provider, 'getTypeByExtension'):
             return self.provider.getTypeByExtension(extension)
-
-        elif extension.lower() == 'png':
-            return 'image/png', 'PNG'
-
-        elif extension.lower() == 'jpg':
-            return 'image/jpeg', 'JPEG'
-
         else:
             raise KnownUnknown('Unknown extension in configuration: "%s"' % extension)
-
-    def setSaveOptionsJPEG(self, quality=None, optimize=None, progressive=None):
-        """ Optional arguments are added to self.jpeg_options for pickup when saving.
-
-            More information about options:
-                http://effbot.org/imagingbook/format-jpeg.htm
-        """
-        if quality is not None:
-            self.jpeg_options['quality'] = int(quality)
-
-        if optimize is not None:
-            self.jpeg_options['optimize'] = bool(optimize)
-
-        if progressive is not None:
-            self.jpeg_options['progressive'] = bool(progressive)
-
-    def setSaveOptionsPNG(self, optimize=None, palette=None, palette256=None):
-        """ Optional arguments are added to self.png_options for pickup when saving.
-
-            Palette argument is a URL relative to the configuration file,
-            and it implies bits and optional transparency options.
-
-            More information about options:
-                http://effbot.org/imagingbook/format-png.htm
-        """
-        if optimize is not None:
-            self.png_options['optimize'] = bool(optimize)
-
-        if palette is not None:
-            palette = urljoin(self.config.dirpath, palette)
-            palette, bits, t_index = load_palette(palette)
-
-            self.bitmap_palette, self.png_options['bits'] = palette, bits
-
-            if t_index is not None:
-                self.png_options['transparency'] = t_index
-
-        if palette256 is not None:
-            self.palette256 = bool(palette256)
-        else:
-            self.palette256 = None
 
 class KnownUnknown(Exception):
     """ There are known unknowns. That is to say, there are things that we now know we don't know.
@@ -665,103 +515,3 @@ class TheTileLeftANote(Exception):
 
         Exception.__init__(self, self.headers, self.status_code,
                            self.content, self.emit_content_type)
-
-def _preview(layer):
-    """ Get an HTML response for a given named layer.
-    """
-    layername = layer.name()
-    lat, lon = layer.preview_lat, layer.preview_lon
-    zoom = layer.preview_zoom
-    ext = layer.preview_ext
-
-    return """<!DOCTYPE html>
-<html>
-<head>
-    <title>TileStache Preview: %(layername)s</title>
-    <script src="http://code.modestmaps.com/tilestache/modestmaps.min.js" type="text/javascript"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0;">
-    <style type="text/css">
-        html, body, #map {
-            position: absolute;
-            width: 100%%;
-            height: 100%%;
-            margin: 0;
-            padding: 0;
-        }
-
-        #map img {
-            width: 256px;
-            height: 256px;
-        }
-    </style>
-</head>
-<body>
-    <div id="map"></div>
-    <script type="text/javascript" defer>
-    <!--
-        var template = '{Z}/{X}/{Y}.%(ext)s';
-        var provider = new com.modestmaps.TemplatedMapProvider(template);
-        var map = new MM.Map('map', provider, null, [
-            new MM.TouchHandler(),
-            new MM.DragHandler(),
-            new MM.DoubleClickHandler()
-        ]);
-        map.setCenterZoom(new com.modestmaps.Location(%(lat).6f, %(lon).6f), %(zoom)d);
-        // hashify it
-        new MM.Hash(map);
-    //-->
-    </script>
-</body>
-</html>
-""" % locals()
-
-def _rummy():
-    """ Draw Him.
-    """
-    return ['------------------------------------------------------------------------------------------------------------',
-            'MB###BHHHBBMBBBB#####MBBHHHHBBBBHHAAA&GG&AAAHB###MHAAAAAAAAAHHAGh&&&AAAAH#@As;;shM@@@@@@@@@@@@@@@@@@@@@@@@@@',
-            'MGBMHAGG&&AAA&&AAM##MHAGG&GG&&GGGG93X5SS2XX9hh3255X2issii5X3h9X22555XXXX9H@A.   rA@@@@@@@@@@@@@@@@@@@@@@@@@@',
-            'BAM#BAAAAAAHHAAAHM##MBHAAAAAAAAAAAAG9X2X3hGXiii5X9hG3X9Xisi29B##BA33hGGhGB@@r   ;9@@@@@@@@@@@@@@@@@@@@@@@@@@',
-            'BAM#MHAAAHHHAAAAHM###BHAAAAAAAAAAAAGhXX3h2iSX&A&&AAHAGGAGs;rrri2r;rSiXGA&B@@9.  ,2#@@@@@@@@@@@@@@@@@@@@@@@@@',
-            'B&B#MHAAAAHHHAAAHM##MBHAAAAAAAAAAHAG93XSrs5Xh93h3XXX93529Xr;:,,:;;s25223AB@@@;   sB@@@@@@@@@@@@@@@@@@@@@@@@@',
-            'B&B#BAAAAAHHHAAAHB##MBAAAAAAAAAAAHHAh5rs2AGGAhXisiissSsr;r;::,:riiiisrr,s#@@@9.  ,2#@@@@@@@@@@@@@@@@@@@@@@@@',
-            'B&B#BAAAAAAHAAAAHM###BHA&AAAAAA&AAHA2S&#@MBHGX22s;;;;r;;:,:,,:;;rrr:,,:,.X@@@@r   :9@@@@@@@@@@@@@@@@@@@@@@@@',
-            'BAM#MAAAAAAAAAAAAB##MBAA&AAAAAAA&AH929AHA9XhXirrir::;r;;:::,:,,:,;rsr;,.,;2@@@#,   :G@@@@@@@@@@@@@@@@@@@@@@B',
-            'B&B#MAAAAAAHAAAAABM#MHAA&&&&&&&&&H&ss3AXisisisr;;r;::;::::,..,,,,::;rir;,;,A@@@G.   ;9@@@@@@@@@@@@@@@@@@@@@#',
-            'B&B#MHAAAAHHAAAAABM#MHAAA&G&A&&&AG2rr2X; .:;;;;::::::::::,,,,,:,.,;::;;,;rr:@@@@X    :2#@@@@@@@@@@@@@@@@@@@@',
-            'B&B##HAAAAHHAAAAABMMMHAA&&&&&AAA&h2:r2r..:,,,,,,,,,,,,:;:,,,,,,. ,;;;::, ;2rr@@@@2    :SB@@@@@@@@@@@@@@@@@@@',
-            'BGB##HAAAAAAAAAAABMMMBAA&&&&&&&&AHr ir:;;;;:,,,,,,::::,,:,:,,,,...;:;:,:,:2Xr&@@@@3.   .rG@@@@@@@@@@@@@@@@@@',
-            'B&B@#B&&AAAAAA&&AHMMMBAA&&&&&&&&AH,.i;;rrr;::,,:::::::,,::::::,,..;,:;.;;iXGSs#@@@@A,    :5#@@@@@@@@@@@@@@@@',
-            'B&M@@B&&AAAHAA&&AHMMMBAA&&&&&&&&AA;,;rrrrr;;::::::::::::::::::::.:;.::,:5A9r,.9@@@@@M;    .;G@@@@@@@@@@@@@@@',
-            'B&M@@B&&AAHAAA&&AHMMMBAA&G&GG&&&AM3;rrr;rr;;;;;;:::::;;,:,::,,,..,:;;:,;2r:.:;r@@##@@@i     .sH@@@@@@@@@@@@@',
-            'BGM@@B&&AAAHAA&&AHMMMBHAGGGG&&&&AMHs;srrr;r:;;;;::::::,..,,,,,,...,;rrrsi, . :,#@####@@A;     ,iB@@@@@@@@@@@',
-            'B&#@@B&&AAAAAA&&AHMMMBAA&GGGGG&&&BHr,rirr;;;::::::::::,,,,,::,,::,.,SS;r:.;r .,A#HHMBB#@@2,     :iA@@@@@@@@@',
-            'B&#@@B&&AAAAAA&&AHBMBBAAGGGGGGG&&H#2:sis;;;::,,:::r;rsrr23HMAXr:::,:;...,,,5s,,#BGGAAAAB@@#i.     ,rG@@@@@@@',
-            'B&#@@BG&AAAAAA&&AHHBMHAAGGhhGGGGGA#Hrs9s;;;;r;:;s5Xrrh@@@@@@@@&5rr;. .,,;. ;;.;@Bh39hhhAM#@@Ar.     ,rG#@@@@',
-            'BA#@@BG&AAAAAA&&AHBMMBA&GGGGGGGGGAM#3r5SsiSSX@@@#@@i. 2h5ir;;:;r;:...,,:,.,;,,3@HG99XX23&H#MMBAS,     .;2H@@',
-            'BA#@@B&&AAAAAA&&&AHBMBAA&GGGGGGGhABMhsrirrS9#@Mh5iG&::r;..:;:,,.,...,::,,,...,A@A&h9X255XGAA93B#MX;      .:X',
-            'BH@@@B&&AAAAAA&G&ABM#BHAGGGGGGGGG&HBAXiir;s2r;;:rrsi.,,.   .....,,,,::,.,,:: :2@H&Gh9X2523AG253AM@@Ai,     ,',
-            'MB@@@B&&AAAAAAGGAA###@#H&GGGGGGG&AHBAXXi;,. .:,,, .;:,.,;:;..,::::;;;:,,,:,srs5@B&hhh32229AG2S29GAB#@#A2;  .',
-            'MB@@@BGGAAAAA&&GAHr  ,sH#AGGhhGGG&AH&X22s:..,. .  ;S:,. .,i9r;::,,:;:::,:::,,5A#BAhhhX22X9AG2i2X9hG&AB#@@B3r',
-            'MB@@@B&&AAAAAA&AM#;..   ;AAGhhGGG&AHGX2XXis::,,,,,Xi,.:.ri;Xir;:,...,:::;::,.:S9#AGh9X2229A&2i52X39hhG&AM@@&',
-            'MM@@@B&GAAAHBHBhsiGhhGi. 3MGGhGGG&HH&X52GXshh2r;;rXiB25sX2r;;:ii;,...:;:;:;:.., r#G33X2223AG2i52XX3339hGAA&&',
-            '#M@@@B&GAM#A3hr  .;S5;:, ;MAGhGGG&ABAX55X9rS93s::i::i52X;,::,,,;5r:,,,::;;;:,.i  @@AXX222X&G2S52XXXX3399hhh&',
-            '#M@@@BAB&S;  .:, .,,;,;;. rBGhhGG&ABAXSS29G5issrrS,,,,,:,...,;i;rr:,:,,::;::,,r  #@@B25523&G2iS2XXX3X33999h&',
-            '#M@@@MH;  ,. .;i::::;rr;, ,M&GGGh&AHAXSS2X3hXirss5;r;:;;;2#@@H9Ai;::,,,,:;:;::   ,@@@#Xi23&G2iS2XXX3X33339h&',
-            '#M#@@#i  .:;,.,::,::;&ii;.;#AGhGG&AHAXSS2XX3&hir;;s9GG@@@@@h;,,riirr;:,.:;;;.    i@##@@AS2hh5iS222XXXX3999hG',
-            '#M@@@@:.;,,:r,,;r,,..h#sr: rHAGhG&AHAXSi52X39AAir::is;::,,. .::,sssrr;,,;r:     ,@@MM#@@#HBA2iiSS5522XX39hhG',
-            '#M@@@@r.sr,:rr::r;,, ,As:,  :B&hh&ABAXSiSS5229HHS3r;rSSsiiSSr;:,,,:;;r;;;       @@#BMM#@@@@@@@@#MH&93XXXXX3G',
-            '#M@@@@A,:r:,:i,,rr,,. ;;;,. ;BGhhGAHAX5529hAAAM#AH#2i25Ss;;;:.....,rSi2r       M@@MMMM##@#@@@@@@@@@@@@@@#MHA',
-            '#M@@@@M::rr::SS,;r;::.:;;r:rHAh9h&ABM##@@@@@@@@ABAAA25i;::;;;:,,,,:r32:       H@@#MM######@@@@@@@@@@@@@@@@@#',
-            '#M@@@@@5:;sr;;9r:i;,.,sr;;iMHhGABM#####@@@@@@@BHH&H@#AXr;;r;rsr;;ssS;        H@@##########@@@##@@@@@@@@@@@@#',
-            '#M@@@@##r;;s;:3&;rsSrrisr:h#AHM#######BM#@@@#HHH9hM@@@X&92XX9&&G2i,     .,:,@@@##M########@@@####@@@@@@@@@##',
-            '#M#@@@M@2,:;s;;2s:rAX5SirS#BB##@@@##MAAHB#@#BBH93GA@@@2 2@@@MAAHA  .,,:,,. G@@#M#################@@@@@@#####',
-            '#M#@@#M@;,;:,,,;h52iX33sX@@#@@@@@@@#Ah&&H####HhA@@@@@@@;s@@@@H5@@  .      r@@##M###########@###@@@@@@#######',
-            '#M#@@@#r.:;;;;rrrrrri5iA@@#@@@@@@@@#HHAH##MBA&#@@@@@@@@3i@@@@@3:,        ,@@#M############@@###@@@@@########',
-            '#M@@@@r r::::;;;;;;rirA@#@@@@@@@@@@@#MGAMMHBAB@@@@@@@@@#2@@@@#i ..       #@##M#####@###@@@@###@@@@##########',
-            '#M#@@@  2;;;;;;rr;rish@@#@#@@@@@@@@@@B&hGM#MH#@@@@@@@@@@3;,h@.   ..     :@@MM#######@@@@#####@@@@###########',
-            '#M@@#A  ;r;riirrrr;:2S@###@@@@@@@@@@@#AH#@#HB#@@@@@@@@@@@@2A9           @@#BMMM############@#@@@####M#######',
-            '#M@MM#      ,:,:;;,5ir@B#@@@@@@@@@@@@@@@@@#MMH#@@@@@@@@@@@@r Ms        B@#MMMMMM####@###@@#@@@@#####M######@',
-            '##Mh@M  .    ...:;;,:@A#@@@@@@@@@@@#@@@@@@#MMHAB@@@@#G#@@#: i@@       r@@#MMM#######@@@@#@@@@@@#####M#####@@',
-            '#H3#@3. ,.    ...  :@@&@@@@@@@@@@@@@#@@#@@@MMBHGA@H&;:@@i :B@@@B     .@@#MM####@@@##@@@#@@@@@#######M##M#@@@',
-            'M&AM5i;.,.   ..,,rA@@MH@@@@@@@@@@@@@##@@@@@MMMBB#@h9hH#s;3######,   .A@#MMM#####@@@@@##@@@#@@#####M#####M39B']

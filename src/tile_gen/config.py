@@ -1,6 +1,6 @@
-""" The configuration bits of TileStache.
+""" The configuration bits of tile-gen.
 
-TileStache configuration is stored in JSON files, and is composed of two main
+tile-gen configuration is stored in JSON files, and is composed of two main
 top-level sections: "cache" and "layers". There are examples of both in this
 minimal sample configuration:
 
@@ -8,8 +8,9 @@ minimal sample configuration:
       "cache": {"name": "Test"},
       "layers": {
         "example": {
-            "provider": {"name": "mapnik", "mapfile": "examples/style.xml"},,
-            "projection": "spherical mercator"
+            "provider": {"class": "tile_gen.vectiles.server.Provider",
+                         ...
+                         ...
         }
       }
     }
@@ -23,19 +24,16 @@ TileStache.Caches module documentation. Here is a different sample:
       "umask": "0000"
     }
 
-The "layers" section is a dictionary of layer names which are specified in the
-URL of an individual tile. More detail on the configuration of individual layers
-can be found in the TileStache.Core module documentation. Another sample:
+The "layers" section is a dictionary of layer names. Example:
 
     {
       "cache": ...,
       "layers":
       {
-        "example-name":
+        "example-layer-name":
         {
             "provider": { ... },
             "metatile": { ... },
-            "preview": { ... },
             "stale lock timeout": ...,
             "projection": ...
         }
@@ -46,13 +44,6 @@ Configuration also supports these additional settings:
 
 - "logging": one of "debug", "info", "warning", "error" or "critical", as
   described in Python's logging module: http://docs.python.org/howto/logging.html
-
-- "index": configurable index pages for the front page of an instance.
-  A custom index can be specified as a filename relative to the configuration
-  location. Typically an HTML document would be given here, but other kinds of
-  files such as images can be used, with MIME content-type headers determined
-  by mimetypes.guess_type. A simple text greeting is displayed if no index
-  is provided.
 
 In-depth explanations of the layer components can be found in the module
 documentation for TileStache.Providers, TileStache.Core, and TileStache.Geography.
@@ -68,7 +59,6 @@ from sys import stderr, modules
 from os.path import realpath, join as pathjoin
 from urlparse import urljoin, urlparse
 from mimetypes import guess_type
-from urllib import urlopen
 from json import dumps
 from ModestMaps.Geo import Location
 from ModestMaps.Core import Coordinate
@@ -85,43 +75,14 @@ class Configuration:
 
           layers:
             Dictionary of layers keyed by name.
-
-            When creating a custom layers dictionary, e.g. for dynamic
-            layer collections backed by some external configuration,
-            these dictionary methods must be provided for a complete
-            collection of layers:
-
-              keys():
-                Return list of layer name strings.
-
-              items():
-                Return list of (name, layer) pairs.
-
-              __contains__(key):
-                Return boolean true if given key is an existing layer.
-
-              __getitem__(key):
-                Return existing layer object for given key or raise KeyError.
-
-          dirpath:
-            Local filesystem path for this configuration,
-            useful for expanding relative paths.
-
-        Optional attribute:
-
-          index:
-            Mimetype, content tuple for default index response.
     """
-    def __init__(self, cache, dirpath):
+    def __init__(self, cache):
         self.cache = cache
-        self.dirpath = dirpath
         self.layers = {}
 
         # adding custom_layer to extend multiprovider to support comma separated layernames
         self.custom_layer_name = ","
         self.custom_layer_dict = {'provider': {'class': 'tile_gen.vectiles.server.MultiProvider', 'kwargs': {'names': []}}}
-
-        self.index = 'text/plain', 'tile-gen bellows hello.'
 
 class Bounds:
     """ Coordinate bounding box for tiles.
@@ -192,35 +153,17 @@ class BoundsList:
         # Nothing worked.
         return True
 
-def build_config(config_dict, dirpath='.'):
+def build_config(config_dict):
     """ Build a configuration dictionary into a Configuration object.
-
-        The second argument is an optional dirpath that specifies where in the
-        local filesystem the parsed dictionary originated, to make it possible
-        to resolve relative paths. It might be a path or more likely a full
-        URL including the "file://" prefix.
     """
-    scheme, h, path, p, q, f = urlparse(dirpath)
-
-    if scheme in ('', 'file'):
-        sys.path.insert(0, path)
-
     cache_dict = config_dict.get('cache', {})
-    cache = _parseConfigfileCache(cache_dict, dirpath)
-
-    config = Configuration(cache, dirpath)
+    cache      = parse_config_cache(cache_dict)
+    config     = Configuration(cache)
 
     for (name, layer_dict) in config_dict.get('layers', {}).items():
-        config.layers[name] = _parseConfigfileLayer(layer_dict, config, dirpath)
+        config.layers[name] = parse_config_layer(layer_dict, config)
 
-    config.layers[config.custom_layer_name] = _parseConfigfileLayer(config.custom_layer_dict, config, dirpath)
-
-    if 'index' in config_dict:
-        index_href = urljoin(dirpath, config_dict['index'])
-        index_body = urlopen(index_href).read()
-        index_type = guess_type(index_href)
-
-        config.index = index_type[0], index_body
+    config.layers[config.custom_layer_name] = parse_config_layer(config.custom_layer_dict, config)
 
     if 'logging' in config_dict:
         level = config_dict['logging'].upper()
@@ -230,43 +173,7 @@ def build_config(config_dict, dirpath='.'):
 
     return config
 
-def enforcedLocalPath(relpath, dirpath, context='Path'):
-    """ Return a forced local path, relative to a directory.
-
-        Throw an error if the combination of path and directory seems to
-        specify a remote path, e.g. "/path" and "http://example.com".
-
-        Although a configuration file can be parsed from a remote URL, some
-        paths (e.g. the location of a disk cache) must be local to the server.
-        In cases where we mix a remote configuration location with a local
-        cache location, e.g. "http://example.com/tilestache.cfg", the disk path
-        must include the "file://" prefix instead of an ambiguous absolute
-        path such as "/tmp/tilestache".
-    """
-    parsed_dir = urlparse(dirpath)
-    parsed_rel = urlparse(relpath)
-
-    if parsed_rel.scheme not in ('file', ''):
-        raise core.KnownUnknown('%s path must be a local file path, absolute or "file://", not "%s".' % (context, relpath))
-
-    if parsed_dir.scheme not in ('file', '') and parsed_rel.scheme != 'file':
-        raise core.KnownUnknown('%s path must start with "file://" in a remote configuration ("%s" relative to %s)' % (context, relpath, dirpath))
-
-    if parsed_rel.scheme == 'file':
-        # file:// is an absolute local reference for the disk cache.
-        return parsed_rel.path
-
-    if parsed_dir.scheme == 'file':
-        # file:// is an absolute local reference for the directory.
-        return urljoin(parsed_dir.path, parsed_rel.path)
-
-    # nothing has a scheme, it's probably just a bunch of
-    # dumb local paths, so let's see what happens next.
-    return pathjoin(dirpath, relpath)
-
-def _parseConfigfileCache(cache_dict, dirpath):
-    """ Used by parseConfigfile() to parse just the cache parts of a config.
-    """
+def parse_config_cache(cache_dict):
     if 'name' in cache_dict:
         _class = caches.getCacheByName(cache_dict['name'])
         kwargs = {}
@@ -282,16 +189,13 @@ def _parseConfigfileCache(cache_dict, dirpath):
             if cache_dict.get('verbose', False):
                 kwargs['logfunc'] = lambda msg: stderr.write(msg + '\n')
 
-        elif _class is caches.Disk:
-            kwargs['path'] = enforcedLocalPath(cache_dict['path'], dirpath, 'Disk cache path')
-
             if 'umask' in cache_dict:
                 kwargs['umask'] = int(cache_dict['umask'], 8)
 
             add_kwargs('dirs', 'gzip')
 
         elif _class is caches.Multi:
-            kwargs['tiers'] = [_parseConfigfileCache(tier_dict, dirpath)
+            kwargs['tiers'] = [parse_config_cache(tier_dict)
                                for tier_dict in cache_dict['tiers']]
 
         elif _class is caches.Memcache.Cache:
@@ -313,7 +217,7 @@ def _parseConfigfileCache(cache_dict, dirpath):
             raise Exception('Unknown cache: %s' % cache_dict['name'])
 
     elif 'class' in cache_dict:
-        _class = loadClassPath(cache_dict['class'])
+        _class = load_class_path(cache_dict['class'])
         kwargs = cache_dict.get('kwargs', {})
         kwargs = dict( [(str(k), v) for (k, v) in kwargs.items()] )
 
@@ -324,7 +228,7 @@ def _parseConfigfileCache(cache_dict, dirpath):
 
     return cache
 
-def _parseLayerBounds(bounds_dict, projection):
+def parse_layer_bounds(bounds_dict, projection):
     """
     """
     north, west = bounds_dict.get('north', 89), bounds_dict.get('west', -180)
@@ -339,7 +243,7 @@ def _parseLayerBounds(bounds_dict, projection):
 
     return Bounds(ul_hi, lr_lo)
 
-def _parseConfigfileLayer(layer_dict, config, dirpath):
+def parse_config_layer(layer_dict, config):
     """ Used by parseConfigfile() to parse just the layer parts of a config.
     """
     projection = layer_dict.get('projection', 'spherical mercator')
@@ -360,39 +264,22 @@ def _parseConfigfileLayer(layer_dict, config, dirpath):
     if 'write cache' in layer_dict:
         layer_kwargs['write_cache'] = bool(layer_dict['write cache'])
 
-    if 'allowed origin' in layer_dict:
-        layer_kwargs['allowed_origin'] = str(layer_dict['allowed origin'])
-
     if 'maximum cache age' in layer_dict:
         layer_kwargs['max_cache_age'] = int(layer_dict['maximum cache age'])
 
-    if 'redirects' in layer_dict:
-        layer_kwargs['redirects'] = dict(layer_dict['redirects'])
-
-    if 'tile height' in layer_dict:
-        layer_kwargs['tile_height'] = int(layer_dict['tile height'])
-
-    if 'preview' in layer_dict:
-        preview_dict = layer_dict['preview']
-
-        for (key, func) in zip(('lat', 'lon', 'zoom', 'ext'), (float, float, int, str)):
-            if key in preview_dict:
-                layer_kwargs['preview_' + key] = func(preview_dict[key])
-
-    #
-    # Do the bounds
-    #
-
     if 'bounds' in layer_dict:
         if type(layer_dict['bounds']) is dict:
-            layer_kwargs['bounds'] = _parseLayerBounds(layer_dict['bounds'], projection)
+            layer_kwargs['bounds'] = parse_layer_bounds(layer_dict['bounds'], projection)
 
         elif type(layer_dict['bounds']) is list:
-            bounds = [_parseLayerBounds(b, projection) for b in layer_dict['bounds']]
+            bounds = [parse_layer_bounds(b, projection) for b in layer_dict['bounds']]
             layer_kwargs['bounds'] = BoundsList(bounds)
 
         else:
             raise core.KnownUnknown('Layer bounds must be a dictionary, not: ' + dumps(layer_dict['bounds']))
+
+    if 'tile height' in layer_dict:
+        layer_kwargs['tile_height'] = int(layer_dict['tile height'])
 
     #
     # Do the metatile
@@ -408,19 +295,6 @@ def _parseConfigfileLayer(layer_dict, config, dirpath):
     metatile = core.Metatile(**metatile_kwargs)
 
     #
-    # Do the per-format options
-    #
-
-    jpeg_kwargs = {}
-    png_kwargs = {}
-
-    if 'jpeg options' in layer_dict:
-        jpeg_kwargs = dict([(str(k), v) for (k, v) in layer_dict['jpeg options'].items()])
-
-    if 'png options' in layer_dict:
-        png_kwargs = dict([(str(k), v) for (k, v) in layer_dict['png options'].items()])
-
-    #
     # Do the provider
     #
 
@@ -431,27 +305,21 @@ def _parseConfigfileLayer(layer_dict, config, dirpath):
         provider_kwargs = _class.prepareKeywordArgs(provider_dict)
 
     elif 'class' in provider_dict:
-        _class = loadClassPath(provider_dict['class'])
+        _class = load_class_path(provider_dict['class'])
         provider_kwargs = provider_dict.get('kwargs', {})
         provider_kwargs = dict( [(str(k), v) for (k, v) in provider_kwargs.items()] )
 
     else:
         raise Exception('Missing required provider name or class: %s' % dumps(provider_dict))
 
-    #
-    # Finish him!
-    #
-
     layer = core.Layer(config, projection, metatile, **layer_kwargs)
     layer.provider = _class(layer, **provider_kwargs)
-    layer.setSaveOptionsJPEG(**jpeg_kwargs)
-    layer.setSaveOptionsPNG(**png_kwargs)
 
     return layer
 
-def loadClassPath(classpath):
+def load_class_path(classpath):
     """ Load external class based on a path.
-        Example classpath: "Module.Submodule:Classname".
+        Example classpath: "Module.Submodule.Classname".
     """
     modname, objname = classpath.rsplit('.', 1)
     __import__(modname)

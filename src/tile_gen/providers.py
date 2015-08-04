@@ -53,7 +53,7 @@ A provider may offer a method for custom response type, getTypeByExtension().
 This method accepts a single argument, a filename extension string (e.g. "png",
 "json", etc.) and returns a tuple with twon strings: a mime-type and a format.
 Note that for image and non-image tiles alike, renderArea() and renderTile()
-methods on a provider class must return a object with a save() method that
+ve() method that
 can accept a file-like object and a format name, e.g. this should word:
 
     provder.renderArea(...).save(fp, "TEXT")
