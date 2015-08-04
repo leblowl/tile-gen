@@ -14,5 +14,5 @@ wget http://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/pla
 osmconvert planet-latest.osm.pbf -o=planet-latest.o5m
 osmfilter planet-latest.o5m --keep="highway= route=road" -o=streets.o5m
 osm2pgsql -c -d osm -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
---slim -C 24000 --flat-nodes ./tmp --hstore -l
+--slim -C 24000 --flat-nodes ./tmp -k -l
 ```
