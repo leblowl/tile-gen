@@ -13,6 +13,6 @@ pip install git+https://github.com/leblowl/tile-gen#egg=tile-gen
 wget http://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 osmconvert planet-latest.osm.pbf -o=planet-latest.o5m
 osmfilter planet-latest.o5m --keep="highway= route=road" -o=streets.o5m
-osm2pgsql -c -d gis -S ../mapzen/vector-datasource/osm2pgsql.style streets.o5m \
+osm2pgsql -c -d gis -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
 -l --slim -C 36000 --flat-nodes node.cache --hstore --number-processes 16
 ```
