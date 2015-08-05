@@ -23,7 +23,7 @@ Installation:
 ```shell
 wget https://gist.githubusercontent.com/leblowl/cbd047c8633d5b321ec7/raw/29ad1d7da6c11a36cd340543a5bd2b59100e3a91/build_init.py
 mv build_init.py ~/.config/python
-echo 'export PYTHONSTARTUP=$HOME/.config/python/build_init.py' >> ~/.profile
+echo -e '\nexport PYTHONSTARTUP=$HOME/.config/python/build_init.py' >> ~/.profile
 source ~/.profile
 ```
 Now in the project root, you can run:
