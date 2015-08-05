@@ -29,6 +29,6 @@ source ~/.profile
 Now in the project root, you can run:
 ```shell
 python -i
-> import tile_gen.app as tile_gen
-> tile_gen.get_tile('all', 0, 0, 0, 'mvt')
+>>> import tile_gen.app as tile_gen
+>>> tile_gen.get_tile('all', 0, 0, 0, 'mvt')
 ```
