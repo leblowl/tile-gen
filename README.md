@@ -18,6 +18,12 @@ osm2pgsql -c -d gis -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
 ```
 
 ## Hacking tile-gen
+```shell
+git clone https://github.com/zoondka/tile-gen/
+cd tile-gen
+pip install -e .
+```
+
 I'm using a little startup script to help initialize the system path on repl launch.
 Installation:
 ```shell
@@ -26,6 +32,7 @@ mv build_init.py ~/.config/python
 echo -e '\nexport PYTHONSTARTUP=$HOME/.config/python/build_init.py' >> ~/.profile
 source ~/.profile
 ```
+
 Now in the project root, you can run:
 ```shell
 python -i
