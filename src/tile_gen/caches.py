@@ -1,37 +1,32 @@
-""" The cache bits of TileStache.
+"""
+A cache stores static files to speed up future requests.
+A few built-in caches are found here, but it's possible to define your
+own and pull them in dynamically by class name.
 
-A Cache is the part of TileStache that stores static files to speed up future
-requests. A few default caches are found here, but it's possible to define your
-own and pull them into TileStache dynamically by class name.
-
-Built-in providers:
+Built-in caches:
 - test
 - disk
-- multi
-- memcache
-- s3
 
-Example built-in cache, for JSON configuration file:
+Example built-in cache configuration:
 
     "cache": {
       "name": "Disk",
-      "path": "/tmp/stache",
+      "path": "/tmp/data",
       "umask": "0000"
     }
 
-Example external cache, for JSON configuration file:
+Example external cache configuration:
 
     "cache": {
-      "class": "Module:Classname",
+      "class": "Module.Classname",
       "kwargs": {"frob": "yes"}
     }
 
 - The "class" value is split up into module and classname, and dynamically
-  included. If this doesn't work for some reason, TileStache will fail loudly
-  to let you know.
+  included. Exception thrown on failure to include.
 - The "kwargs" value is fed to the class constructor as a dictionary of keyword
   args. If your defined class doesn't accept any of these keyword arguments,
-  TileStache will throw an exception.
+  an exception is thrown.
 
 A cache must provide these methods: lock(), unlock(), read(), and save().
 Each method accepts three arguments:
@@ -43,8 +38,6 @@ Each method accepts three arguments:
 The save() method accepts an additional argument before the others:
 
 - body: raw content to save to the cache.
-
-TODO: add stale_lock_timeout and cache_lifespan to cache API in v2.
 """
 
 import os
@@ -55,7 +48,7 @@ from tempfile import mkstemp
 from os.path import isdir, exists, dirname, basename, join as pathjoin
 from tile_gen.core import KnownUnknown
 
-def getCacheByName(name):
+def get_cache_by_name(name):
     """ Retrieve a cache object by name.
 
         Raise an exception if the name doesn't work out.
@@ -65,9 +58,6 @@ def getCacheByName(name):
 
     elif name.lower() == 'disk':
         return Disk
-
-    elif name.lower() == 'multi':
-        return Multi
 
     raise Exception('Unknown cache name: "%s"' % name)
 
@@ -346,85 +336,3 @@ class Disk:
             os.rename(tmp_path, fullpath)
 
         os.chmod(fullpath, 0666&~self.umask)
-
-class Multi:
-    """ Caches tiles to multiple, ordered caches.
-
-        Multi cache is well-suited for a speed-to-capacity gradient, for
-        example a combination of Memcache and S3 to take advantage of the high
-        speed of memcache and the high capacity of S3. Each tier of caching is
-        checked sequentially when reading from the cache, while all tiers are
-        used together for writing. Locks are only used with the first cache.
-
-        Example configuration:
-
-            "cache": {
-              "name": "Multi",
-              "tiers": [
-                  {
-                     "name": "Memcache",
-                     "servers": ["127.0.0.1:11211"]
-                  },
-                  {
-                     "name": "Disk",
-                     "path": "/tmp/stache"
-                  }
-              ]
-            }
-
-        Multi cache parameters:
-
-          tiers
-            Required list of cache configurations. The fastest, most local
-            cache should be at the beginning of the list while the slowest or
-            most remote cache should be at the end. Memcache and S3 together
-            make a great pair.
-
-    """
-    def __init__(self, tiers):
-        self.tiers = tiers
-
-    def lock(self, layer, coord, format):
-        """ Acquire a cache lock for this tile in the first tier.
-
-            Returns nothing, but blocks until the lock has been acquired.
-        """
-        return self.tiers[0].lock(layer, coord, format)
-
-    def unlock(self, layer, coord, format):
-        """ Release a cache lock for this tile in the first tier.
-        """
-        return self.tiers[0].unlock(layer, coord, format)
-
-    def remove(self, layer, coord, format):
-        """ Remove a cached tile from every tier.
-        """
-        for (index, cache) in enumerate(self.tiers):
-            cache.remove(layer, coord, format)
-
-    def read(self, layer, coord, format):
-        """ Read a cached tile.
-
-            Start at the first tier and work forwards until a cached tile
-            is found. When found, save it back to the earlier tiers for faster
-            access on future requests.
-        """
-        for (index, cache) in enumerate(self.tiers):
-            body = cache.read(layer, coord, format)
-
-            if body:
-                # save the body in earlier tiers for speedier access
-                for cache in self.tiers[:index]:
-                    cache.save(body, layer, coord, format)
-
-                return body
-
-        return None
-
-    def save(self, body, layer, coord, format):
-        """ Save a cached tile.
-
-            Every tier gets a saved copy.
-        """
-        for (index, cache) in enumerate(self.tiers):
-            cache.save(body, layer, coord, format)

@@ -175,7 +175,7 @@ def build_config(config_dict):
 
 def parse_config_cache(cache_dict):
     if 'name' in cache_dict:
-        _class = caches.getCacheByName(cache_dict['name'])
+        _class = caches.get_cache_by_name(cache_dict['name'])
         kwargs = {}
 
         def add_kwargs(*keys):
@@ -185,33 +185,19 @@ def parse_config_cache(cache_dict):
                 if key in cache_dict:
                     kwargs[key] = cache_dict[key]
 
+        print _class
+
         if _class is caches.Test:
             if cache_dict.get('verbose', False):
                 kwargs['logfunc'] = lambda msg: stderr.write(msg + '\n')
+
+        elif _class is caches.Disk:
+            kwargs['path'] = cache_dict['path']
 
             if 'umask' in cache_dict:
                 kwargs['umask'] = int(cache_dict['umask'], 8)
 
             add_kwargs('dirs', 'gzip')
-
-        elif _class is caches.Multi:
-            kwargs['tiers'] = [parse_config_cache(tier_dict)
-                               for tier_dict in cache_dict['tiers']]
-
-        elif _class is caches.Memcache.Cache:
-            if 'key prefix' in cache_dict:
-                kwargs['key_prefix'] = cache_dict['key prefix']
-
-            add_kwargs('servers', 'lifespan', 'revision')
-
-        elif _class is caches.Redis.Cache:
-            if 'key prefix' in cache_dict:
-                kwargs['key_prefix'] = cache_dict['key prefix']
-
-            add_kwargs('host', 'port', 'db')
-
-        elif _class is caches.S3.Cache:
-            add_kwargs('bucket', 'access', 'secret', 'use_locks', 'path', 'reduced_redundancy')
 
         else:
             raise Exception('Unknown cache: %s' % cache_dict['name'])

@@ -24,7 +24,7 @@ from psycopg2.extensions import TransactionRollbackError
 from ModestMaps.Core import Point
 from tile_gen.geography import SphericalMercator
 from tile_gen.core import KnownUnknown
-from tile_gen.config import loadClassPath
+from tile_gen.config import load_class_path
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
@@ -41,7 +41,7 @@ def make_transform_fn(transform_fns):
 def resolve_transform_fns(fn_dotted_names):
     if not fn_dotted_names:
         return None
-    return map(loadClassPath, fn_dotted_names)
+    return map(load_class_path, fn_dotted_names)
 
 class Provider:
     ''' VecTiles provider for PostGIS data sources.
@@ -152,7 +152,7 @@ class Provider:
         self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
         if sort_fn:
             self.sort_fn_name = sort_fn
-            self.sort_fn = loadClassPath(sort_fn)
+            self.sort_fn = load_class_path(sort_fn)
         else:
             self.sort_fn_name = None
             self.sort_fn = None

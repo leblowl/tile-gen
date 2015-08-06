@@ -87,7 +87,7 @@ import logging
 from StringIO import StringIO
 from urlparse import urljoin
 from time import time
-import Image
+from PIL import Image
 from ModestMaps.Core import Coordinate
 
 _recent_tiles = dict(hash={}, list=[])
