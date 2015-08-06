@@ -33,7 +33,6 @@ The "layers" section is a dictionary of layer names. Example:
         "example-layer-name":
         {
             "provider": { ... },
-            "metatile": { ... },
             "stale lock timeout": ...,
             "projection": ...
         }
@@ -185,8 +184,6 @@ def parse_config_cache(cache_dict):
                 if key in cache_dict:
                     kwargs[key] = cache_dict[key]
 
-        print _class
-
         if _class is caches.Test:
             if cache_dict.get('verbose', False):
                 kwargs['logfunc'] = lambda msg: stderr.write(msg + '\n')
@@ -225,7 +222,7 @@ def parse_layer_bounds(bounds_dict, projection):
         ul_hi = projection.locationCoordinate(Location(north, west)).zoomTo(high)
         lr_lo = projection.locationCoordinate(Location(south, east)).zoomTo(low)
     except TypeError:
-        raise core.KnownUnknown('Bad bounds for layer, need north, south, east, west, high, and low: ' + dumps(bounds_dict))
+        raise Exception('Bad bounds for layer, need north, south, east, west, high, and low: ' + dumps(bounds_dict))
 
     return Bounds(ul_hi, lr_lo)
 
@@ -262,23 +259,10 @@ def parse_config_layer(layer_dict, config):
             layer_kwargs['bounds'] = BoundsList(bounds)
 
         else:
-            raise core.KnownUnknown('Layer bounds must be a dictionary, not: ' + dumps(layer_dict['bounds']))
+            raise Exception('Layer bounds must be a dictionary, not: ' + dumps(layer_dict['bounds']))
 
     if 'tile height' in layer_dict:
         layer_kwargs['tile_height'] = int(layer_dict['tile height'])
-
-    #
-    # Do the metatile
-    #
-
-    meta_dict = layer_dict.get('metatile', {})
-    metatile_kwargs = {}
-
-    for k in ('buffer', 'rows', 'columns'):
-        if k in meta_dict:
-            metatile_kwargs[k] = int(meta_dict[k])
-
-    metatile = core.Metatile(**metatile_kwargs)
 
     #
     # Do the provider
@@ -287,7 +271,7 @@ def parse_config_layer(layer_dict, config):
     provider_dict = layer_dict['provider']
 
     if 'name' in provider_dict:
-        _class = providers.getProviderByName(provider_dict['name'])
+        _class = providers.get_provider_by_name(provider_dict['name'])
         provider_kwargs = _class.prepareKeywordArgs(provider_dict)
 
     elif 'class' in provider_dict:
@@ -298,7 +282,7 @@ def parse_config_layer(layer_dict, config):
     else:
         raise Exception('Missing required provider name or class: %s' % dumps(provider_dict))
 
-    layer = core.Layer(config, projection, metatile, **layer_kwargs)
+    layer = core.Layer(config, projection, **layer_kwargs)
     layer.provider = _class(layer, **provider_kwargs)
 
     return layer

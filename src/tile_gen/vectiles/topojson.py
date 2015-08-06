@@ -1,5 +1,4 @@
 from shapely.wkb import loads
-from tile_gen.core import KnownUnknown
 import json
 
 def update_arc_indexes(geometry, merged_arcs, old_arcs):
@@ -161,7 +160,7 @@ def merge(file, names, inputs, config, coord):
     unique_xforms = set([tuple(xform['scale'] + xform['translate']) for xform in transforms])
 
     if len(unique_xforms) > 1:
-        raise KnownUnknown('%s.merge encountered incompatible transforms: %s' % (__name__, list(unique_xforms)))
+        raise Exception('%s.merge encountered incompatible transforms: %s' % (__name__, list(unique_xforms)))
 
     output = {
         'type': 'Topology',

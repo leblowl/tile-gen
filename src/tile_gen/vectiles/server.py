@@ -2,9 +2,6 @@
 
 VecTiles is intended for rendering, and returns tiles with contents simplified,
 precision reduced and often clipped.
-
-For a more general implementation, try the Vector provider:
-    http://tilestache.org/doc/#vector-provider
 '''
 
 import json
@@ -23,7 +20,6 @@ from psycopg2 import connect
 from psycopg2.extensions import TransactionRollbackError
 from ModestMaps.Core import Point
 from tile_gen.geography import SphericalMercator
-from tile_gen.core import KnownUnknown
 from tile_gen.config import load_class_path
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
@@ -389,20 +385,20 @@ class MultiResponse:
         unknown_layers = set(self.names) - set(self.config.layers.keys())
 
         if unknown_layers:
-            raise KnownUnknown("%s.get_tiles didn't recognize %s when trying to load %s." % (__name__, ', '.join(unknown_layers), ', '.join(self.names)))
+            raise Exception("%s.get_tiles didn't recognize %s when trying to load %s." % (__name__, ', '.join(unknown_layers), ', '.join(self.names)))
 
         layers = [self.config.layers[name] for name in self.names]
         mimes, bodies = zip(*[getTile(layer, self.coord, format.lower(), self.ignore_cached_sublayers, self.ignore_cached_sublayers) for layer in layers])
         bad_mimes = [(name, mime) for (mime, name) in zip(mimes, self.names) if not mime.endswith('/json')]
 
         if bad_mimes:
-            raise KnownUnknown('%s.get_tiles encountered a non-JSON mime-type in %s sub-layer: "%s"' % ((__name__, ) + bad_mimes[0]))
+            raise Exception('%s.get_tiles encountered a non-JSON mime-type in %s sub-layer: "%s"' % ((__name__, ) + bad_mimes[0]))
 
         tiles = map(json.loads, bodies)
         bad_types = [(name, topo['type']) for (topo, name) in zip(tiles, self.names) if topo['type'] != ('FeatureCollection' if (format.lower()=='json') else 'Topology')]
 
         if bad_types:
-            raise KnownUnknown('%s.get_tiles encountered a non-%sCollection type in %s sub-layer: "%s"' % ((__name__, ('Feature' if (format.lower()=='json') else 'Topology'), ) + bad_types[0]))
+            raise Exception('%s.get_tiles encountered a non-%sCollection type in %s sub-layer: "%s"' % ((__name__, ('Feature' if (format.lower()=='json') else 'Topology'), ) + bad_types[0]))
 
         return tiles
 

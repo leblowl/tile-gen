@@ -35,7 +35,6 @@ You can also instantiate a projection class using this syntax:
 from ModestMaps.Core import Point, Coordinate
 from ModestMaps.Geo import deriveTransformation, MercatorProjection, LinearProjection, Location
 from math import log as _log, pi as _pi
-
 import tile_gen.core
 import tile_gen.config
 
@@ -145,4 +144,4 @@ def getProjectionByName(name):
         try:
             return Config.loadClassPath(name)
         except Exception, e:
-            raise Core.KnownUnknown('Failed projection in configuration: "%s" - %s' % (name, e))
+            raise Exception('Failed projection in configuration: "%s" - %s' % (name, e))

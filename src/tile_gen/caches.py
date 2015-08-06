@@ -46,7 +46,6 @@ import time
 import gzip
 from tempfile import mkstemp
 from os.path import isdir, exists, dirname, basename, join as pathjoin
-from tile_gen.core import KnownUnknown
 
 def get_cache_by_name(name):
     """ Retrieve a cache object by name.
@@ -208,7 +207,7 @@ class Disk:
             filepath = os.sep.join([l] + parts[:-1] + [parts[-1] + '.' + e])
 
         else:
-            raise KnownUnknown('Please provide a valid "dirs" parameter to the Disk cache, either "safe", "portable" or "quadtile" but not "%s"' % self.dirs)
+            raise Exception('Please provide a valid "dirs" parameter to the Disk cache, either "safe", "portable" or "quadtile" but not "%s"' % self.dirs)
 
         return filepath
 
