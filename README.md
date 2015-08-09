@@ -8,7 +8,7 @@ Experimental Vector Tile Generation
 pip install git+https://github.com/leblowl/tile-gen#egg=tile-gen
 ```
 ## Data Preparation
-#### Postgresql, Planet.osm, & [mapzen/vector-datasource](https://github.com/mapzen/vector-datasource) example
+##### Postgresql, Planet.osm, & [mapzen/vector-datasource](https://github.com/mapzen/vector-datasource) example
 ```
 wget http://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 osmconvert planet-latest.osm.pbf -o=planet-latest.o5m
@@ -18,10 +18,12 @@ osm2pgsql -c -d gis -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
 ```
 
 ## Hacking tile-gen
+##### Installation
 ```shell
 git clone https://github.com/zoondka/tile-gen/ && cd tile-gen
 pip install -e .
 ```
+##### REPL
 ```shell
 python setup.py repl
 >>> import tile_gen.app as tile_gen
