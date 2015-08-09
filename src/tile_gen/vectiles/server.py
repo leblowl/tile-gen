@@ -80,14 +80,6 @@ class Provider:
             Useful for creating double resolution (retina) tiles set to 0.5, or
             set to 0.0 to prevent any simplification. Default 1.0.
 
-          simplify_until:
-            Optional integer specifying a zoom level where no more geometry
-            simplification should occur. Default 16.
-
-          suppress_simplification:
-            Optional list of zoom levels where no dynamic simplification should
-            occur.
-
           geometry_types:
             Optional list of geometry types that constrains the results of what
             kind of features are returned.
@@ -130,7 +122,7 @@ class Provider:
             }
           }
     '''
-    def __init__(self, layer, dbinfo, queries, clip=True, srid=900913, simplify=1.0, simplify_until=16, suppress_simplification=(), geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
+    def __init__(self, layer, dbinfo, queries, clip=True, srid=900913, simplify=1.0, geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
         '''
         '''
         self.layer = layer
@@ -141,8 +133,6 @@ class Provider:
         self.clip = bool(clip)
         self.srid = int(srid)
         self.simplify = float(simplify)
-        self.simplify_until = int(simplify_until)
-        self.suppress_simplification = set(suppress_simplification)
         self.geometry_types = None if geometry_types is None else set(geometry_types)
         self.transform_fn_names = transform_fns
         self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
@@ -184,10 +174,7 @@ class Provider:
         if query not in self.columns:
             self.columns[query] = query_columns(self.dbinfo, self.srid, query, bounds)
 
-        if coord.zoom in self.suppress_simplification:
-            tolerance = None
-        else:
-            tolerance = self.simplify * tolerances[coord.zoom] if coord.zoom < self.simplify_until else None
+        tolerance = self.simplify * tolerances[coord.zoom]
 
         return Response(self.dbinfo, self.srid, query, self.columns[query], bounds, tolerance, coord.zoom, self.clip, coord, self.layer.name(), self.geometry_types, self.transform_fn, self.sort_fn, self.simplify_before_intersect)
 
