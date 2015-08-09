@@ -19,8 +19,7 @@ osm2pgsql -c -d gis -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
 
 ## Hacking tile-gen
 ```shell
-git clone https://github.com/zoondka/tile-gen/
-cd tile-gen
+git clone https://github.com/zoondka/tile-gen/ && cd tile-gen
 pip install -e .
 ```
 ```shell
