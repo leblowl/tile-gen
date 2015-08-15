@@ -122,14 +122,11 @@ class Provider:
             }
           }
     '''
-    def __init__(self, layer, dbinfo, queries, clip=True, srid=900913, simplify=1.0, geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
+    def __init__(self, dbinfo, queries, clip=True, srid=900913, simplify=1.0, geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
         '''
         '''
-        self.layer = layer
-
         keys = 'host', 'user', 'password', 'database', 'port', 'dbname'
         self.dbinfo = dict([(k, v) for (k, v) in dbinfo.items() if k in keys])
-
         self.clip = bool(clip)
         self.srid = int(srid)
         self.simplify = float(simplify)
@@ -156,7 +153,7 @@ class Provider:
 
             self.queries.append(query)
 
-    def renderTile(self, width, height, srs, coord):
+    def renderTile(self, layer, width, height, srs, coord):
         ''' Render a single tile, return a Response instance.
         '''
         try:
@@ -164,8 +161,8 @@ class Provider:
         except IndexError:
             query = self.queries[-1]
 
-        ll = self.layer.projection.coordinateProj(coord.down())
-        ur = self.layer.projection.coordinateProj(coord.right())
+        ll = layer.projection.coordinateProj(coord.down())
+        ur = layer.projection.coordinateProj(coord.right())
         bounds = ll.x, ll.y, ur.x, ur.y
 
         if not query:
@@ -176,7 +173,20 @@ class Provider:
 
         tolerance = self.simplify * tolerances[coord.zoom]
 
-        return Response(self.dbinfo, self.srid, query, self.columns[query], bounds, tolerance, coord.zoom, self.clip, coord, self.layer.name(), self.geometry_types, self.transform_fn, self.sort_fn, self.simplify_before_intersect)
+        return Response(self.dbinfo,
+                        self.srid,
+                        query,
+                        self.columns[query],
+                        bounds,
+                        tolerance,
+                        coord.zoom,
+                        self.clip,
+                        coord,
+                        layer.name(),
+                        self.geometry_types,
+                        self.transform_fn,
+                        self.sort_fn,
+                        self.simplify_before_intersect)
 
     def getTypeByExtension(self, extension):
         ''' Get mime-type and format by file extension, one of "mvt", "json" or "topojson".
