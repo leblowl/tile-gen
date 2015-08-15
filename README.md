@@ -8,7 +8,7 @@ Experimental Vector Tile Generation
 pip install git+https://github.com/leblowl/tile-gen#egg=tile-gen
 ```
 ## Data Preparation
-#### Postgresql, Planet.osm, & [mapzen/vector-datasource](https://github.com/mapzen/vector-datasource) example
+##### Postgresql, Planet.osm, & [mapzen/vector-datasource](https://github.com/mapzen/vector-datasource) example
 ```
 wget http://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 osmconvert planet-latest.osm.pbf -o=planet-latest.o5m
@@ -18,24 +18,14 @@ osm2pgsql -c -d gis -S mapzen/vector-datasource/osm2pgsql.style streets.o5m \
 ```
 
 ## Hacking tile-gen
+##### Installation
 ```shell
-git clone https://github.com/zoondka/tile-gen/
-cd tile-gen
+git clone https://github.com/zoondka/tile-gen/ && cd tile-gen
 pip install -e .
 ```
-
-I'm using a little startup script to help initialize the system path on repl launch.
-Installation:
+##### REPL
 ```shell
-wget https://gist.githubusercontent.com/leblowl/cbd047c8633d5b321ec7/raw/29ad1d7da6c11a36cd340543a5bd2b59100e3a91/build_init.py
-mv build_init.py ~/.config/python
-echo -e '\nexport PYTHONSTARTUP=$HOME/.config/python/build_init.py' >> ~/.profile
-source ~/.profile
-```
-
-Now in the project root, you can run:
-```shell
-python -i
+python setup.py repl
 >>> import tile_gen.app as tile_gen
 >>> tile_gen.get_tile('all', 0, 0, 0, 'mvt')
 ```
