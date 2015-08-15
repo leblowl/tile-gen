@@ -190,9 +190,6 @@ class Provider:
         elif extension.lower() == 'topojson':
             return 'application/json', 'TopoJSON'
 
-        elif extension.lower() == 'vtm':
-            return 'image/png', 'OpenScienceMap' # TODO: make this proper stream type, app only seems to work with png
-
         else:
             raise ValueError(extension + " is not a valid extension")
 
@@ -244,9 +241,6 @@ class MultiProvider:
         elif extension.lower() == 'topojson':
             return 'application/json', 'TopoJSON'
 
-        elif extension.lower() == 'vtm':
-            return 'image/png', 'OpenScienceMap' # TODO: make this proper stream type, app only seems to work with png
-
         elif extension.lower() == 'mvt':
             return 'application/x-protobuf', 'MVT'
 
@@ -255,9 +249,6 @@ class MultiProvider:
 
 class Connection:
     ''' Context manager for Postgres connections.
-
-        See http://www.python.org/dev/peps/pep-0343/
-        and http://effbot.org/zone/python-with-statement.htm
     '''
     def __init__(self, dbinfo):
         self.dbinfo = dbinfo
@@ -272,8 +263,6 @@ class Connection:
         self.db.connection.close()
 
 class Response:
-    '''
-    '''
     def __init__(self, dbinfo, srid, subquery, columns, bounds, tolerance, zoom, clip, coord, layer_name, geometry_types, transform_fn, sort_fn, simplify_before_intersect):
         ''' Create a new response object with Postgres connection info and a query.
 
@@ -294,8 +283,6 @@ class Response:
         self.query = dict(TopoJSON=geo_query, JSON=geo_query, MVT=mvt_query)
 
     def save(self, out, format):
-        '''
-        '''
         features = get_features(self.dbinfo, self.query[format], self.geometry_types, self.transform_fn, self.sort_fn)
 
         if format == 'MVT':

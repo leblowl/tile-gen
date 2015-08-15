@@ -212,8 +212,6 @@ def parse_config_cache(cache_dict):
     return cache
 
 def parse_layer_bounds(bounds_dict, projection):
-    """
-    """
     north, west = bounds_dict.get('north', 89), bounds_dict.get('west', -180)
     south, east = bounds_dict.get('south', -89), bounds_dict.get('east', 180)
     high, low = bounds_dict.get('high', 31), bounds_dict.get('low', 0)
@@ -227,8 +225,6 @@ def parse_layer_bounds(bounds_dict, projection):
     return Bounds(ul_hi, lr_lo)
 
 def parse_config_layer(layer_dict, config):
-    """ Used by parseConfigfile() to parse just the layer parts of a config.
-    """
     projection = layer_dict.get('projection', 'spherical mercator')
     projection = geography.getProjectionByName(projection)
 
