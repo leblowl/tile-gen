@@ -39,6 +39,257 @@ def resolve_transform_fns(fn_dotted_names):
         return None
     return map(load_class_path, fn_dotted_names)
 
+def query_columns(dbinfo, srid, query, bounds):
+    ''' Get set of column names for query
+    '''
+    with Connection(dbinfo) as db:
+        bbox = 'ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))' % bounds
+        bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
+
+        # newline is important here, to break out of comments.
+        db.execute(query.replace('!bbox!', bbox) + '\n LIMIT 0')
+        return set(x.name for x in db.description)
+
+def get_features(dbinfo, query, geometry_types, transform_fn, sort_fn):
+    features = []
+
+    with Connection(dbinfo) as db:
+        db.execute(query)
+        for row in db.fetchall():
+            assert '__geometry__' in row, 'Missing __geometry__ in feature result'
+            assert '__id__' in row, 'Missing __id__ in feature result'
+
+            wkb = bytes(row.pop('__geometry__'))
+            id = row.pop('__id__')
+            shape = loads(wkb)
+
+            if geometry_types is not None:
+                if shape.type not in geometry_types:
+                    continue
+
+            props = dict((k, v) for k, v in row.items() if v is not None)
+
+            if transform_fn:
+                shape, props, id = transform_fn(shape, props, id)
+                wkb = dumps(shape)
+
+            features.append((wkb, props, id))
+
+    if sort_fn:
+        features = sort_fn(features)
+
+    return features
+
+def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None, simplify_before_intersect=False):
+    ''' Build and return an PostGIS query.
+    '''
+
+    # bounds argument is a 4-tuple with (xmin, ymin, xmax, ymax).
+    bbox = 'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), ST_MakePoint(%.12f, %.12f))' % (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
+    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
+    geom = 'q.__geometry__'
+
+    # To get around this, for any given tile bounding box, we find the
+    # contained/overlapping geometries and simplify them BEFORE
+    # cutting out the precise tile bounding bbox (instead of cutting out the
+    # tile and then simplifying everything inside of it, as we do with all of
+    # the other layers).
+
+    if simplify_before_intersect:
+        # Simplify, then cut tile.
+
+        if tolerance is not None:
+            # The problem with simplifying all contained/overlapping geometries
+            # for a tile before cutting out the parts that actually lie inside
+            # of it is that we might end up simplifying a massive geometry just
+            # to extract a small portion of it (think simplifying the border of
+            # the US just to extract the New York City coastline). To reduce the
+            # performance hit, we actually identify all of the candidate
+            # geometries, then cut out a bounding box *slightly larger* than the
+            # tile bbox, THEN simplify, and only then cut out the tile itself.
+            # This still allows us to perform simplification of the geometry
+            # edges outside of the tile, which prevents any seams from forming
+            # when we cut it out, but means that we don't have to simplify the
+            # entire geometry (just the small bits lying right outside the
+            # desired tile).
+
+            simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
+            simplification_bbox = (
+                'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
+                'ST_MakePoint(%.12f, %.12f))' % (
+                    bounds[0] - simplification_padding,
+                    bounds[1] - simplification_padding,
+                    bounds[2] + simplification_padding,
+                    bounds[3] + simplification_padding))
+            simplification_bbox = 'ST_SetSrid(%s, %d)' % (
+                simplification_bbox, srid)
+
+            geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
+            geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (
+                geom, tolerance)
+
+        assert is_clipped, 'If simplify_before_intersect=True, ' \
+            'is_clipped should be True as well'
+        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
+
+    else:
+        # Cut tile, then simplify.
+
+        if is_clipped:
+            geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
+
+        if tolerance is not None:
+            geom = 'ST_SimplifyPreserveTopology(%s, %.12f)' % (geom, tolerance)
+
+    if is_geo:
+        geom = 'ST_Transform(%s, 4326)' % geom
+
+    if scale:
+        # scale applies to the un-padded bounds, e.g. geometry in the padding area "spills over" past the scale range
+        geom = ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
+                % (geom, -bounds[0], -bounds[1],
+                   scale / (bounds[2] - bounds[0]),
+                   scale / (bounds[3] - bounds[1])))
+
+    subquery = subquery.replace('!bbox!', bbox)
+    columns = ['q."%s"' % c for c in subcolumns if c not in ('__geometry__', )]
+
+    if '__geometry__' not in subcolumns:
+        raise Exception("There's supposed to be a __geometry__ column.")
+
+    if '__id__' not in subcolumns:
+        columns.append('Substr(MD5(ST_AsBinary(q.__geometry__)), 1, 10) AS __id__')
+
+    columns = ', '.join(columns)
+
+    return '''SELECT %(columns)s,
+                     ST_AsBinary(%(geom)s) AS __geometry__
+              FROM (
+                %(subquery)s
+                ) AS q
+              WHERE ST_IsValid(q.__geometry__)
+                AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
+            % locals()
+
+class Connection:
+    ''' Context manager for Postgres connections.
+    '''
+    def __init__(self, dbinfo):
+        self.dbinfo = dbinfo
+
+    def __enter__(self):
+        conn = connect(**self.dbinfo)
+        conn.set_session(readonly=True, autocommit=True)
+        self.db = conn.cursor(cursor_factory=RealDictCursor)
+        return self.db
+
+    def __exit__(self, type, value, traceback):
+        self.db.connection.close()
+
+class EmptyResponse:
+    def __init__(self, bounds):
+        self.bounds = bounds
+
+    def save(self, out, format):
+        if format == 'MVT':
+            mvt.encode(out, [], None)
+
+        elif format == 'JSON':
+            geojson.encode(out, [], 0)
+
+        elif format == 'TopoJSON':
+            ll = SphericalMercator().projLocation(Point(*self.bounds[0:2]))
+            ur = SphericalMercator().projLocation(Point(*self.bounds[2:4]))
+            topojson.encode(out, [], (ll.lon, ll.lat, ur.lon, ur.lat))
+
+        else:
+            raise ValueError(format + " is not supported")
+
+class Response:
+    def __init__(self, dbinfo, layer, query, columns, bounds, tolerance, coord):
+        self.dbinfo = dbinfo
+        self.bounds = bounds
+        self.coord = coord
+        self.zoom = coord.zoom
+        self.layer_name = layer.name
+        self.geometry_types = layer.geometry_types
+        self.transform_fn = layer.transform_fn
+        self.sort_fn = layer.sort_fn
+
+        srid = layer.srid
+        clip = layer.clip
+        simplify_before_intersect = layer.simplify_before_intersect
+
+        geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip, simplify_before_intersect=simplify_before_intersect)
+        mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents, simplify_before_intersect=simplify_before_intersect)
+        self.query = dict(TopoJSON=geo_query, JSON=geo_query, MVT=mvt_query)
+
+    def save(self, out, format):
+        features = get_features(self.dbinfo, self.query[format], self.geometry_types, self.transform_fn, self.sort_fn)
+
+        if format == 'MVT':
+            mvt.encode(out, features, self.coord, self.layer_name)
+
+        elif format == 'JSON':
+            geojson.encode(out, features, self.zoom)
+
+        elif format == 'TopoJSON':
+            ll = SphericalMercator().projLocation(Point(*self.bounds[0:2]))
+            ur = SphericalMercator().projLocation(Point(*self.bounds[2:4]))
+            topojson.encode(out, features, (ll.lon, ll.lat, ur.lon, ur.lat))
+
+        else:
+            raise ValueError(format + " is not supported")
+
+class MultiResponse:
+    def __init__(self, config, names, coord, ignore_cached_sublayers):
+        self.config = config
+        self.names = names
+        self.coord = coord
+        self.ignore_cached_sublayers = ignore_cached_sublayers
+
+    def save(self, out, format):
+        if format == 'TopoJSON':
+            topojson.merge(out, self.names, self.get_tiles(format), self.config, self.coord)
+
+        elif format == 'JSON':
+            geojson.merge(out, self.names, self.get_tiles(format), self.config, self.coord)
+
+        elif format == 'MVT':
+            feature_layers = []
+            layers = [self.config.layers[name] for name in self.names]
+            for layer in layers:
+                width, height = layer.dim, layer.dim
+                tile = layer.provider.renderTile(width, height, layer.projection.srs, self.coord)
+                if isinstance(tile,EmptyResponse): continue
+                feature_layers.append({'name': layer.name, 'features': get_features(tile.dbinfo, tile.query["MVT"], layer.provider.geometry_types, layer.provider.transform_fn, layer.provider.sort_fn)})
+            mvt.merge(out, feature_layers, self.coord)
+
+        else:
+            raise ValueError(format + " is not supported for responses with multiple layers")
+
+    def get_tiles(self, format):
+        unknown_layers = set(self.names) - set(self.config.layers.keys())
+
+        if unknown_layers:
+            raise Exception("%s.get_tiles didn't recognize %s when trying to load %s." % (__name__, ', '.join(unknown_layers), ', '.join(self.names)))
+
+        layers = [self.config.layers[name] for name in self.names]
+        mimes, bodies = zip(*[getTile(layer, self.coord, format.lower(), self.ignore_cached_sublayers, self.ignore_cached_sublayers) for layer in layers])
+        bad_mimes = [(name, mime) for (mime, name) in zip(mimes, self.names) if not mime.endswith('/json')]
+
+        if bad_mimes:
+            raise Exception('%s.get_tiles encountered a non-JSON mime-type in %s sub-layer: "%s"' % ((__name__, ) + bad_mimes[0]))
+
+        tiles = map(json.loads, bodies)
+        bad_types = [(name, topo['type']) for (topo, name) in zip(tiles, self.names) if topo['type'] != ('FeatureCollection' if (format.lower()=='json') else 'Topology')]
+
+        if bad_types:
+            raise Exception('%s.get_tiles encountered a non-%sCollection type in %s sub-layer: "%s"' % ((__name__, ('Feature' if (format.lower()=='json') else 'Topology'), ) + bad_types[0]))
+
+        return tiles
+
+
 class Provider:
     ''' VecTiles provider for PostGIS data sources.
 
@@ -124,18 +375,6 @@ class MultiProvider:
         ignore_cached_sublayers:
           True if cache provider should not save intermediate layers
           in cache.
-
-        Sample configuration, for a layer with combined data from water
-        and land areas, both assumed to be vector-returning layers:
-
-          "provider":
-          {
-            "class": "TileStache.Goodies.VecTiles:MultiProvider",
-            "kwargs":
-            {
-              "names": ["water-areas", "land-areas"]
-            }
-          }
     '''
     def __init__(self, layer, names, ignore_cached_sublayers=False):
         self.layer = layer
@@ -148,273 +387,4 @@ class MultiProvider:
         self.ignore_cached_sublayers = ignore_cached_sublayers
 
     def render_tile(self, layer, coord):
-        ''' Render a single tile, return a Response instance.
-        '''
         return MultiResponse(layer.config, self.names, coord, self.ignore_cached_sublayers)
-
-class Connection:
-    ''' Context manager for Postgres connections.
-    '''
-    def __init__(self, dbinfo):
-        self.dbinfo = dbinfo
-
-    def __enter__(self):
-        conn = connect(**self.dbinfo)
-        conn.set_session(readonly=True, autocommit=True)
-        self.db = conn.cursor(cursor_factory=RealDictCursor)
-        return self.db
-
-    def __exit__(self, type, value, traceback):
-        self.db.connection.close()
-
-class Response:
-    def __init__(self, dbinfo, layer, query, columns, bounds, tolerance, coord):
-        self.dbinfo = dbinfo
-        self.bounds = bounds
-        self.coord = coord
-        self.zoom = coord.zoom
-        self.layer_name = layer.name
-        self.geometry_types = layer.geometry_types
-        self.transform_fn = layer.transform_fn
-        self.sort_fn = layer.sort_fn
-
-        srid = layer.srid
-        clip = layer.clip
-        simplify_before_intersect = layer.simplify_before_intersect
-
-        geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip, simplify_before_intersect=simplify_before_intersect)
-        mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents, simplify_before_intersect=simplify_before_intersect)
-        self.query = dict(TopoJSON=geo_query, JSON=geo_query, MVT=mvt_query)
-
-    def save(self, out, format):
-        features = get_features(self.dbinfo, self.query[format], self.geometry_types, self.transform_fn, self.sort_fn)
-
-        if format == 'MVT':
-            mvt.encode(out, features, self.coord, self.layer_name)
-
-        elif format == 'JSON':
-            geojson.encode(out, features, self.zoom)
-
-        elif format == 'TopoJSON':
-            ll = SphericalMercator().projLocation(Point(*self.bounds[0:2]))
-            ur = SphericalMercator().projLocation(Point(*self.bounds[2:4]))
-            topojson.encode(out, features, (ll.lon, ll.lat, ur.lon, ur.lat))
-
-        else:
-            raise ValueError(format + " is not supported")
-
-class EmptyResponse:
-    def __init__(self, bounds):
-        self.bounds = bounds
-
-    def save(self, out, format):
-        '''
-        '''
-        if format == 'MVT':
-            mvt.encode(out, [], None)
-
-        elif format == 'JSON':
-            geojson.encode(out, [], 0)
-
-        elif format == 'TopoJSON':
-            ll = SphericalMercator().projLocation(Point(*self.bounds[0:2]))
-            ur = SphericalMercator().projLocation(Point(*self.bounds[2:4]))
-            topojson.encode(out, [], (ll.lon, ll.lat, ur.lon, ur.lat))
-
-        else:
-            raise ValueError(format + " is not supported")
-
-class MultiResponse:
-    def __init__(self, config, names, coord, ignore_cached_sublayers):
-        self.config = config
-        self.names = names
-        self.coord = coord
-        self.ignore_cached_sublayers = ignore_cached_sublayers
-
-    def save(self, out, format):
-        if format == 'TopoJSON':
-            topojson.merge(out, self.names, self.get_tiles(format), self.config, self.coord)
-
-        elif format == 'JSON':
-            geojson.merge(out, self.names, self.get_tiles(format), self.config, self.coord)
-
-        elif format == 'MVT':
-            feature_layers = []
-            layers = [self.config.layers[name] for name in self.names]
-            for layer in layers:
-                width, height = layer.dim, layer.dim
-                tile = layer.provider.renderTile(width, height, layer.projection.srs, self.coord)
-                if isinstance(tile,EmptyResponse): continue
-                feature_layers.append({'name': layer.name, 'features': get_features(tile.dbinfo, tile.query["MVT"], layer.provider.geometry_types, layer.provider.transform_fn, layer.provider.sort_fn)})
-            mvt.merge(out, feature_layers, self.coord)
-
-        else:
-            raise ValueError(format + " is not supported for responses with multiple layers")
-
-    def get_tiles(self, format):
-        unknown_layers = set(self.names) - set(self.config.layers.keys())
-
-        if unknown_layers:
-            raise Exception("%s.get_tiles didn't recognize %s when trying to load %s." % (__name__, ', '.join(unknown_layers), ', '.join(self.names)))
-
-        layers = [self.config.layers[name] for name in self.names]
-        mimes, bodies = zip(*[getTile(layer, self.coord, format.lower(), self.ignore_cached_sublayers, self.ignore_cached_sublayers) for layer in layers])
-        bad_mimes = [(name, mime) for (mime, name) in zip(mimes, self.names) if not mime.endswith('/json')]
-
-        if bad_mimes:
-            raise Exception('%s.get_tiles encountered a non-JSON mime-type in %s sub-layer: "%s"' % ((__name__, ) + bad_mimes[0]))
-
-        tiles = map(json.loads, bodies)
-        bad_types = [(name, topo['type']) for (topo, name) in zip(tiles, self.names) if topo['type'] != ('FeatureCollection' if (format.lower()=='json') else 'Topology')]
-
-        if bad_types:
-            raise Exception('%s.get_tiles encountered a non-%sCollection type in %s sub-layer: "%s"' % ((__name__, ('Feature' if (format.lower()=='json') else 'Topology'), ) + bad_types[0]))
-
-        return tiles
-
-
-def query_columns(dbinfo, srid, query, bounds):
-    ''' Get set of column names for query
-    '''
-    with Connection(dbinfo) as db:
-        bbox = 'ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))' % bounds
-        bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
-
-        # newline is important here, to break out of comments.
-        db.execute(query.replace('!bbox!', bbox) + '\n LIMIT 0')
-        return set(x.name for x in db.description)
-
-def get_features(dbinfo, query, geometry_types, transform_fn, sort_fn):
-    features = []
-
-    with Connection(dbinfo) as db:
-        db.execute(query)
-        for row in db.fetchall():
-            assert '__geometry__' in row, 'Missing __geometry__ in feature result'
-            assert '__id__' in row, 'Missing __id__ in feature result'
-
-            wkb = bytes(row.pop('__geometry__'))
-            id = row.pop('__id__')
-            shape = loads(wkb)
-
-            if geometry_types is not None:
-                if shape.type not in geometry_types:
-                    continue
-
-            props = dict((k, v) for k, v in row.items() if v is not None)
-
-            if transform_fn:
-                shape, props, id = transform_fn(shape, props, id)
-                wkb = dumps(shape)
-
-            features.append((wkb, props, id))
-
-    if sort_fn:
-        features = sort_fn(features)
-
-    return features
-
-def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None, simplify_before_intersect=False):
-    ''' Build and return an PostGIS query.
-    '''
-
-    # bounds argument is a 4-tuple with (xmin, ymin, xmax, ymax).
-    bbox = 'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), ST_MakePoint(%.12f, %.12f))' % (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
-    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
-    geom = 'q.__geometry__'
-
-    # Special care must be taken when simplifying certain geometries (like those
-    # in the earth/water layer) to prevent tile border "seams" from forming:
-    # these occur when a geometry is split across multiple tiles (like a
-    # continuous strip of land or body of water) and thus, for any such tile,
-    # the part of that geometry inside of it lines up along one or more of its
-    # edges. If there's any kind of fine geometric detail near one of these
-    # edges, simplification might remove it in a way that makes the edge of the
-    # geometry move off the edge of the tile. See this example of a tile
-    # pre-simplification:
-    # https://cloud.githubusercontent.com/assets/4467604/7937704/aef971b4-090f-11e5-91b9-d973ef98e5ef.png
-    # and post-simplification:
-    # https://cloud.githubusercontent.com/assets/4467604/7937705/b1129dc2-090f-11e5-9341-6893a6892a36.png
-    # at which point a seam formed.
-    #
-    # To get around this, for any given tile bounding box, we find the
-    # contained/overlapping geometries and simplify them BEFORE
-    # cutting out the precise tile bounding bbox (instead of cutting out the
-    # tile and then simplifying everything inside of it, as we do with all of
-    # the other layers).
-
-    if simplify_before_intersect:
-        # Simplify, then cut tile.
-
-        if tolerance is not None:
-            # The problem with simplifying all contained/overlapping geometries
-            # for a tile before cutting out the parts that actually lie inside
-            # of it is that we might end up simplifying a massive geometry just
-            # to extract a small portion of it (think simplifying the border of
-            # the US just to extract the New York City coastline). To reduce the
-            # performance hit, we actually identify all of the candidate
-            # geometries, then cut out a bounding box *slightly larger* than the
-            # tile bbox, THEN simplify, and only then cut out the tile itself.
-            # This still allows us to perform simplification of the geometry
-            # edges outside of the tile, which prevents any seams from forming
-            # when we cut it out, but means that we don't have to simplify the
-            # entire geometry (just the small bits lying right outside the
-            # desired tile).
-
-            simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
-            simplification_bbox = (
-                'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
-                'ST_MakePoint(%.12f, %.12f))' % (
-                    bounds[0] - simplification_padding,
-                    bounds[1] - simplification_padding,
-                    bounds[2] + simplification_padding,
-                    bounds[3] + simplification_padding))
-            simplification_bbox = 'ST_SetSrid(%s, %d)' % (
-                simplification_bbox, srid)
-
-            geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
-            geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (
-                geom, tolerance)
-
-        assert is_clipped, 'If simplify_before_intersect=True, ' \
-            'is_clipped should be True as well'
-        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-
-    else:
-        # Cut tile, then simplify.
-
-        if is_clipped:
-            geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-
-        if tolerance is not None:
-            geom = 'ST_SimplifyPreserveTopology(%s, %.12f)' % (geom, tolerance)
-
-    if is_geo:
-        geom = 'ST_Transform(%s, 4326)' % geom
-
-    if scale:
-        # scale applies to the un-padded bounds, e.g. geometry in the padding area "spills over" past the scale range
-        geom = ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
-                % (geom, -bounds[0], -bounds[1],
-                   scale / (bounds[2] - bounds[0]),
-                   scale / (bounds[3] - bounds[1])))
-
-    subquery = subquery.replace('!bbox!', bbox)
-    columns = ['q."%s"' % c for c in subcolumns if c not in ('__geometry__', )]
-
-    if '__geometry__' not in subcolumns:
-        raise Exception("There's supposed to be a __geometry__ column.")
-
-    if '__id__' not in subcolumns:
-        columns.append('Substr(MD5(ST_AsBinary(q.__geometry__)), 1, 10) AS __id__')
-
-    columns = ', '.join(columns)
-
-    return '''SELECT %(columns)s,
-                     ST_AsBinary(%(geom)s) AS __geometry__
-              FROM (
-                %(subquery)s
-                ) AS q
-              WHERE ST_IsValid(q.__geometry__)
-                AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
-            % locals()

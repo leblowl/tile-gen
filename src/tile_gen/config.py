@@ -44,6 +44,7 @@ import sys
 import tile_gen.layer
 import tile_gen.caches as caches
 import tile_gen.geography as geography
+import tile_gen.vectiles.server.Provider as provider
 from sys import stderr, modules
 from json import dumps
 
@@ -58,22 +59,12 @@ class Configuration:
           layers:
             Dictionary of layers keyed by name.
     """
-    def __init__(self, cache):
+    def __init__(self, cache, provider, layers):
         self.cache = cache
-        self.layers = {}
+        self.provider = provider
+        self.layers = layers
 
-def build_config(config_dict):
-    """ Build a configuration dictionary into a Configuration object.
-    """
-    cache      = parse_config_cache(config_dict.get('cache', {}))
-    config     = Configuration(cache)
-
-    for (name, layer_dict) in config_dict.get('layers', {}).items():
-        config.layers[name] = parse_config_layer(name, layer_dict)
-
-    return config
-
-def parse_config_cache(cache_dict):
+def parse_cache(cache_dict):
     if 'name' in cache_dict:
         _class = caches.get_cache_by_name(cache_dict['name'])
         kwargs = {}
@@ -110,7 +101,11 @@ def parse_config_cache(cache_dict):
 
     return cache
 
-def parse_config_layer(name, layer_dict):
+def parse_provider(provider_dict):
+    dbinfo = provider_dict.get('dbinfo', {})
+    return provider(**dbinfo)
+
+def parse_layer(name, layer_dict):
     projection = layer_dict.get('projection', 'spherical mercator')
     projection = geography.getProjectionByName(projection)
 
@@ -120,6 +115,23 @@ def parse_config_layer(name, layer_dict):
     layer = tile_gen.layer.Layer(name, projection, tile_height)
 
     return layer
+
+def parse_layers(layers_dict):
+    layers = {}
+    for (name, layer_dict) in layers_dict.items():
+        layers[name] = parse_layer(name, layer_dict)
+
+    return layers
+
+def build_config(config_dict):
+    """ Build a configuration dictionary into a Configuration object.
+    """
+    cache      = parse_cache(config_dict.get('cache', {}))
+    provider   = parse_provider(config_dict.get('provider', {}))
+    layers     = parse_layers(config_dict.get('layers', {}))
+
+    return Configuration(cache, provider, layers)
+
 
 def load_class_path(classpath):
     """ Load external class based on a path.

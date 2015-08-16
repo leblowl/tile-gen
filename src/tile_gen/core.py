@@ -1,22 +1,18 @@
 from StringIO import StringIO
 from ModestMaps.Core import Coordinate
 import json
-import tile_gen.config as config
+import tile_gen.config as c
 import tile_gen.util as u
 
-env = None
-provider = None
+config = c.build_config(json.load(u.open("tilestache.cfg")))
 
-def init(dbinfo):
-    env = config.build_config(json.load(u.open("tilestache.cfg")))
-    provider = tile_gen.vectiles.server.Provider(dbinfo)
-
-def get_tile(layer, z, x, y, ext, ignore_cached=False):
+def get_tile(layer, z, x, y, ext, ignore_cached = False):
     if layer not in env.layers: raise IOError("Layer not found: " + layer)
 
-    cache = env.cache
-    layer = env.layers[layer]
-    coord = Coordinate(y, x, z)
+    cache    = config.cache
+    provider = config.provider
+    layer    = config.layers[layer]
+    coord    = Coordinate(y, x, z)
     mimetype, format = u.get_type_by_ext(extension)
 
     cache.lock(layer, coord, format)
