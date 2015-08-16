@@ -1,36 +1,32 @@
 from StringIO import StringIO
+from ModestMaps.Core import Coordinate
+import json
+import tile_gen.config as config
+import tile_gen.util as u
 
-def render(provider, layer, coord, format):
-    """ Render a tile for a coordinate.
-    """
-    srs = layer.projection.srs
-    tile = provider.renderTile(layer.dim, layer.dim, srs, coord)
-    return tile
+env = None
+provider = None
 
-def get_tile(layer, coord, extension, ignore_cached=False):
-    """ Get type and tile binary for a given request layer tile.
+def init(dbinfo):
+    env = config.build_config(json.load(util.open("tilestache.cfg")))
+    provider = tile_gen.vectiles.server.Provider(dbinfo)
 
-    Arguments:
-    - coord: one ModestMaps.Core.Coordinate corresponding to a single tile.
-    - extension: filename extension to choose response type, e.g. "mvt"".
-    - ignore_cached: always re-render the tile, whether it's in the cache or not.
-    """
+def get_tile(layer, z, x, y, ext, ignore_cached=False):
+    if layer not in env.layers: raise IOError("Layer not found: " + layer)
 
-    cache = layer.config.cache
-    provider = tile_gen.vectiles.server.Provider()
-    mimetype, format = provider.getTypeByExtension(extension)
+    cache = env.cache
+    layer = env.layers[layer]
+    coord = Coordinate(y, x, z)
+    mimetype, format = u.get_type_by_ext(extension)
 
     cache.lock(layer, coord, format)
     body = cache.read(layer, coord, format) if not ignore_cached else None
 
     if body is None:
         buff = StringIO()
-        tile = render(coord, format)
+        tile = provider.render_tile(layer, coord)
         tile.save(buff, format)
         cache.save(buff.getvalue(), layer, coord, format)
 
     cache.unlock(layer, coord, format)
     return mimetype, body
-
-def get_tile(coord, extension, ignore_cached=False):
-    return get_tile('all', coord, extension, ignore_cached)

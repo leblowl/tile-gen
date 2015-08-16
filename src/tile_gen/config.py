@@ -69,7 +69,7 @@ def build_config(config_dict):
     config     = Configuration(cache)
 
     for (name, layer_dict) in config_dict.get('layers', {}).items():
-        config.layers[name] = parse_config_layer(layer_dict, config)
+        config.layers[name] = parse_config_layer(name, layer_dict)
 
     return config
 
@@ -110,14 +110,14 @@ def parse_config_cache(cache_dict):
 
     return cache
 
-def parse_config_layer(layer_dict, config):
+def parse_config_layer(name, layer_dict):
     projection = layer_dict.get('projection', 'spherical mercator')
     projection = geography.getProjectionByName(projection)
 
     if 'tile height' in layer_dict:
         tile_height = int(layer_dict['tile height'])
 
-    layer = layer.Layer(config, projection, tile_height)
+    layer = layer.Layer(name, projection, tile_height)
 
     return layer
 

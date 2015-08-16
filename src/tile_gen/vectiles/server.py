@@ -94,114 +94,24 @@ class Provider:
           sort_fn:
             Optional function that will be used to sort features
             fetched from the database.
-
-        Sample configuration, for a layer with no results at zooms 0-9, basic
-        selection of lines with names and highway tags for zoom 10, a remote
-        URL containing a query for zoom 11, and a local file for zooms 12+:
-
-          "provider":
-          {
-            "class": "TileStache.Goodies.VecTiles:Provider",
-            "kwargs":
-            {
-              "dbinfo":
-              {
-                "host": "localhost",
-                "user": "gis",
-                "password": "gis",
-                "database": "gis"
-              },
-              "queries":
-              [
-                null, null, null, null, null,
-                null, null, null, null, null,
-                "SELECT way AS __geometry__, highway, name FROM planet_osm_line -- zoom 10+ ",
-                "http://example.com/query-z11.pgsql",
-                "query-z12-plus.pgsql"
-              ]
-            }
-          }
     '''
-    def __init__(self, dbinfo, queries, clip=True, srid=900913, simplify=1.0, geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
-        '''
-        '''
-        keys = 'host', 'user', 'password', 'database', 'port', 'dbname'
-        self.dbinfo = dict([(k, v) for (k, v) in dbinfo.items() if k in keys])
-        self.clip = bool(clip)
-        self.srid = int(srid)
-        self.simplify = float(simplify)
-        self.geometry_types = None if geometry_types is None else set(geometry_types)
-        self.transform_fn_names = transform_fns
-        self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
-        if sort_fn:
-            self.sort_fn_name = sort_fn
-            self.sort_fn = load_class_path(sort_fn)
-        else:
-            self.sort_fn_name = None
-            self.sort_fn = None
-        self.simplify_before_intersect = simplify_before_intersect
 
-        self.queries = []
-        self.columns = {}
+    def __init__(self, dbinfo):
+        self.dbinfo = dbinfo
 
-        for query in queries:
-            if query:
-                try:
-                    query = util.open(query).read()
-                except IOError:
-                    pass
-
-            self.queries.append(query)
-
-    def renderTile(self, layer, width, height, srs, coord):
-        ''' Render a single tile, return a Response instance.
-        '''
-        try:
-            query = self.queries[coord.zoom]
-        except IndexError:
-            query = self.queries[-1]
-
+    def render_tile(self, layer, coord):
         ll = layer.projection.coordinateProj(coord.down())
         ur = layer.projection.coordinateProj(coord.right())
         bounds = ll.x, ll.y, ur.x, ur.y
+        tolerance = layer.simplify * tolerances[coord.zoom]
+        query = layer.queries[coord.zoom]
 
-        if not query:
-            return EmptyResponse(bounds)
+        if not query: return EmptyResponse(bounds)
 
-        if query not in self.columns:
-            self.columns[query] = query_columns(self.dbinfo, self.srid, query, bounds)
+        if query not in layer.columns:
+            layer.columns[query] = query_columns(self.dbinfo, layer.srid, query, bounds)
 
-        tolerance = self.simplify * tolerances[coord.zoom]
-
-        return Response(self.dbinfo,
-                        self.srid,
-                        query,
-                        self.columns[query],
-                        bounds,
-                        tolerance,
-                        coord.zoom,
-                        self.clip,
-                        coord,
-                        layer.name(),
-                        self.geometry_types,
-                        self.transform_fn,
-                        self.sort_fn,
-                        self.simplify_before_intersect)
-
-    def getTypeByExtension(self, extension):
-        ''' Get mime-type and format by file extension, one of "mvt", "json" or "topojson".
-        '''
-        if extension.lower() == 'mvt':
-            return 'application/x-protobuf', 'MVT'
-
-        elif extension.lower() == 'json':
-            return 'application/json', 'JSON'
-
-        elif extension.lower() == 'topojson':
-            return 'application/json', 'TopoJSON'
-
-        else:
-            raise ValueError(extension + " is not a valid extension")
+        return Response(self.dbinfo, layer, query, layer.columns[query], bounds, tolerance, coord)
 
 class MultiProvider:
     ''' VecTiles provider to gather PostGIS tiles into a single multi-response.
@@ -237,25 +147,10 @@ class MultiProvider:
         self.names = names
         self.ignore_cached_sublayers = ignore_cached_sublayers
 
-    def renderTile(self, width, height, srs, coord):
+    def render_tile(self, layer, coord):
         ''' Render a single tile, return a Response instance.
         '''
-        return MultiResponse(self.layer.config, self.names, coord, self.ignore_cached_sublayers)
-
-    def getTypeByExtension(self, extension):
-        ''' Get mime-type and format by file extension, "json" or "topojson" only.
-        '''
-        if extension.lower() == 'json':
-            return 'application/json', 'JSON'
-
-        elif extension.lower() == 'topojson':
-            return 'application/json', 'TopoJSON'
-
-        elif extension.lower() == 'mvt':
-            return 'application/x-protobuf', 'MVT'
-
-        else:
-            raise ValueError(extension + " is not a valid extension for responses with multiple layers")
+        return MultiResponse(layer.config, self.names, coord, self.ignore_cached_sublayers)
 
 class Connection:
     ''' Context manager for Postgres connections.
@@ -273,23 +168,22 @@ class Connection:
         self.db.connection.close()
 
 class Response:
-    def __init__(self, dbinfo, srid, subquery, columns, bounds, tolerance, zoom, clip, coord, layer_name, geometry_types, transform_fn, sort_fn, simplify_before_intersect):
-        ''' Create a new response object with Postgres connection info and a query.
-
-            bounds argument is a 4-tuple with (xmin, ymin, xmax, ymax).
-        '''
+    def __init__(self, dbinfo, layer, query, columns, bounds, tolerance, coord):
         self.dbinfo = dbinfo
         self.bounds = bounds
-        self.zoom = zoom
-        self.clip = clip
         self.coord = coord
-        self.layer_name = layer_name
-        self.geometry_types = geometry_types
-        self.transform_fn = transform_fn
-        self.sort_fn = sort_fn
+        self.zoom = coord.zoom
+        self.layer_name = layer.name
+        self.geometry_types = layer.geometry_types
+        self.transform_fn = layer.transform_fn
+        self.sort_fn = layer.sort_fn
 
-        geo_query = build_query(srid, subquery, columns, bounds, tolerance, True, clip, simplify_before_intersect=simplify_before_intersect)
-        mvt_query = build_query(srid, subquery, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents, simplify_before_intersect=simplify_before_intersect)
+        srid = layer.srid
+        clip = layer.clip
+        simplify_before_intersect = layer.simplify_before_intersect
+
+        geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip, simplify_before_intersect=simplify_before_intersect)
+        mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents, simplify_before_intersect=simplify_before_intersect)
         self.query = dict(TopoJSON=geo_query, JSON=geo_query, MVT=mvt_query)
 
     def save(self, out, format):
@@ -310,8 +204,6 @@ class Response:
             raise ValueError(format + " is not supported")
 
 class EmptyResponse:
-    ''' Simple empty response renders valid MVT or GeoJSON with no features.
-    '''
     def __init__(self, bounds):
         self.bounds = bounds
 
@@ -333,19 +225,13 @@ class EmptyResponse:
             raise ValueError(format + " is not supported")
 
 class MultiResponse:
-    '''
-    '''
     def __init__(self, config, names, coord, ignore_cached_sublayers):
-        ''' Create a new response object with TileStache config and layer names.
-        '''
         self.config = config
         self.names = names
         self.coord = coord
         self.ignore_cached_sublayers = ignore_cached_sublayers
 
     def save(self, out, format):
-        '''
-        '''
         if format == 'TopoJSON':
             topojson.merge(out, self.names, self.get_tiles(format), self.config, self.coord)
 
@@ -359,7 +245,7 @@ class MultiResponse:
                 width, height = layer.dim, layer.dim
                 tile = layer.provider.renderTile(width, height, layer.projection.srs, self.coord)
                 if isinstance(tile,EmptyResponse): continue
-                feature_layers.append({'name': layer.name(), 'features': get_features(tile.dbinfo, tile.query["MVT"], layer.provider.geometry_types, layer.provider.transform_fn, layer.provider.sort_fn)})
+                feature_layers.append({'name': layer.name, 'features': get_features(tile.dbinfo, tile.query["MVT"], layer.provider.geometry_types, layer.provider.transform_fn, layer.provider.sort_fn)})
             mvt.merge(out, feature_layers, self.coord)
 
         else:
@@ -387,44 +273,32 @@ class MultiResponse:
         return tiles
 
 
-def query_columns(dbinfo, srid, subquery, bounds):
-    ''' Get information about the columns returned for a subquery.
+def query_columns(dbinfo, srid, query, bounds):
+    ''' Get set of column names for query
     '''
     with Connection(dbinfo) as db:
         bbox = 'ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))' % bounds
         bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
 
-        query = subquery.replace('!bbox!', bbox)
-
         # newline is important here, to break out of comments.
-        db.execute(query + '\n LIMIT 0')
-        column_names = set(x.name for x in db.description)
-        return column_names
+        db.execute(query.replace('!bbox!', bbox) + '\n LIMIT 0')
+        return set(x.name for x in db.description)
 
-def get_features(dbinfo, query, geometry_types, transform_fn, sort_fn, n_try=1):
+def get_features(dbinfo, query, geometry_types, transform_fn, sort_fn):
     features = []
 
     with Connection(dbinfo) as db:
-        try:
-            db.execute(query)
-        except TransactionRollbackError:
-            if n_try >= 5:
-                print 'TransactionRollbackError occurred 5 times'
-                raise
-            else:
-                return get_features(dbinfo, query, geometry_types,
-                                    transform_fn, sort_fn, n_try=n_try + 1)
+        db.execute(query)
         for row in db.fetchall():
             assert '__geometry__' in row, 'Missing __geometry__ in feature result'
             assert '__id__' in row, 'Missing __id__ in feature result'
 
             wkb = bytes(row.pop('__geometry__'))
             id = row.pop('__id__')
-
             shape = loads(wkb)
+
             if geometry_types is not None:
                 if shape.type not in geometry_types:
-                    #print 'found %s which is not in: %s' % (geom_type, geometry_types)
                     continue
 
             props = dict((k, v) for k, v in row.items() if v is not None)

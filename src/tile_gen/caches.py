@@ -82,7 +82,7 @@ class Test:
     def _description(self, layer, coord, format):
         """
         """
-        name = layer.name()
+        name = layer.name
         tile = '%(zoom)d/%(column)d/%(row)d' % coord.__dict__
 
         return ' '.join( (name, tile, format) )
@@ -170,7 +170,7 @@ class Disk:
     def _filepath(self, layer, coord, format):
         """
         """
-        l = layer.name()
+        l = layer.name
         z = '%d' % coord.zoom
         e = format.lower()
         e += self._is_compressed(format) and '.gz' or ''

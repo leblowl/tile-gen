@@ -39,14 +39,35 @@ class Layer:
           dim:
             Height & width of square tile in pixels, as a single integer.
     """
-    def __init__(self, config, projection, dim=256):
-        self.config = config
+    def __init__(self, name, projection, queries,
+                 srid=900913, dim=256, clip=True, simplify=1.0,
+                 geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
+
+        self.name = name
         self.projection = projection
+
+        self.queries = []
+        self.columns = {}
+        for query in queries:
+            if query:
+                try:
+                    query = util.open(query).read()
+                except IOError:
+                    pass
+
+            self.queries.append(query)
+
+        self.srid = int(srid)
         self.dim = dim
-
-    def name(self):
-        for (name, layer) in self.config.layers.items():
-            if layer is self:
-                return name
-
-        return None
+        self.clip = clip
+        self.simplify = float(simplify)
+        self.geometry_types = None if geometry_types is None else set(geometry_types)
+        self.transform_fn_names = transform_fns
+        self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
+        if sort_fn:
+            self.sort_fn_name = sort_fn
+            self.sort_fn = load_class_path(sort_fn)
+        else:
+            self.sort_fn_name = None
+            self.sort_fn = None
+        self.simplify_before_intersect = simplify_before_intersect
