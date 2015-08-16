@@ -8,7 +8,7 @@ env = None
 provider = None
 
 def init(dbinfo):
-    env = config.build_config(json.load(util.open("tilestache.cfg")))
+    env = config.build_config(json.load(u.open("tilestache.cfg")))
     provider = tile_gen.vectiles.server.Provider(dbinfo)
 
 def get_tile(layer, z, x, y, ext, ignore_cached=False):
