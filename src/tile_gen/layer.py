@@ -20,6 +20,23 @@ A layer represents a set of tiles:
   to create double-size, double-resolution tiles for high-density phone screens.
 """
 
+import tile_gen.util as u
+
+def make_transform_fn(transform_fns):
+    if not transform_fns:
+        return None
+
+    def transform_fn(shape, properties, fid):
+        for fn in transform_fns:
+            shape, properties, fid = fn(shape, properties, fid)
+        return shape, properties, fid
+    return transform_fn
+
+def resolve_transform_fns(fn_dotted_names):
+    if not fn_dotted_names:
+        return None
+    return map(u.load_class_path, fn_dotted_names)
+
 class Layer:
     """ A Layer.
 
@@ -51,7 +68,7 @@ class Layer:
         for query in queries:
             if query:
                 try:
-                    query = util.open(query).read()
+                    query = u.open(query).read()
                 except IOError:
                     pass
 
@@ -66,7 +83,7 @@ class Layer:
         self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
         if sort_fn:
             self.sort_fn_name = sort_fn
-            self.sort_fn = load_class_path(sort_fn)
+            self.sort_fn = u.load_class_path(sort_fn)
         else:
             self.sort_fn_name = None
             self.sort_fn = None

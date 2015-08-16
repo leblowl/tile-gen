@@ -23,21 +23,6 @@ from tile_gen.geography import SphericalMercator
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
-def make_transform_fn(transform_fns):
-    if not transform_fns:
-        return None
-
-    def transform_fn(shape, properties, fid):
-        for fn in transform_fns:
-            shape, properties, fid = fn(shape, properties, fid)
-        return shape, properties, fid
-    return transform_fn
-
-def resolve_transform_fns(fn_dotted_names):
-    if not fn_dotted_names:
-        return None
-    return map(u.load_class_path, fn_dotted_names)
-
 def query_columns(dbinfo, srid, query, bounds):
     ''' Get set of column names for query
     '''

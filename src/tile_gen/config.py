@@ -103,17 +103,16 @@ def parse_cache(cache_dict):
     return cache
 
 def parse_provider(provider_dict):
-    dbinfo = provider_dict.get('dbinfo', {})
-    return Provider(**dbinfo)
+    return Provider(provider_dict.get('dbinfo', {}))
 
 def parse_layer(name, layer_dict):
     projection = layer_dict.get('projection', 'spherical mercator')
     projection = geography.getProjectionByName(projection)
+    queries = layer_dict.get('queries', [])
 
-    if 'tile height' in layer_dict:
-        tile_height = int(layer_dict['tile height'])
+    # TODO: get all arguments to layer & pass in as kwargs
 
-    layer = tile_gen.layer.Layer(name, projection, tile_height)
+    layer = tile_gen.layer.Layer(name, projection, queries)
 
     return layer
 

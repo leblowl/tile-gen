@@ -44,6 +44,7 @@ import os
 import sys
 import time
 import gzip
+import portalocker
 from tempfile import mkstemp
 from os.path import isdir, exists, dirname, basename, join as pathjoin
 
@@ -212,88 +213,50 @@ class Disk:
         return filepath
 
     def _fullpath(self, layer, coord, format):
-        """
-        """
         filepath = self._filepath(layer, coord, format)
         fullpath = pathjoin(self.cachepath, filepath)
 
         return fullpath
 
     def _lockpath(self, layer, coord, format):
-        """
-        """
         return self._fullpath(layer, coord, format) + '.lock'
 
     def lock(self, layer, coord, format):
-        """ Acquire a cache lock for this tile.
-
-            Returns nothing, but blocks until the lock has been acquired.
-            Lock is implemented as an empty directory next to the tile file.
-        """
-        lockpath = self._lockpath(layer, coord, format)
-        due = time.time() + layer.stale_lock_timeout
-
-        while True:
-            # try to acquire a directory lock, repeating if necessary.
-            try:
-                umask_old = os.umask(self.umask)
-
-                if time.time() > due:
-                    # someone left the door locked.
-                    try:
-                        os.rmdir(lockpath)
-                    except OSError:
-                        # Oh - no they didn't.
-                        pass
-
-                os.makedirs(lockpath, 0777&~self.umask)
-                break
-            except OSError, e:
-                if e.errno != 17:
-                    raise
-                time.sleep(.2)
-            finally:
-                os.umask(umask_old)
-
-    def unlock(self, layer, coord, format):
-        """ Release a cache lock for this tile.
-
-            Lock is implemented as an empty directory next to the tile file.
-        """
-        lockpath = self._lockpath(layer, coord, format)
+        umask_old = os.umask(self.umask)
+        path = self._lockpath(layer, coord, format)
 
         try:
-            os.rmdir(lockpath)
-        except OSError:
-            # Ok, someone else deleted it already
-            pass
+            os.makedirs(os.path.dirname(path), 0777&~self.umask)
+        except OSError, e:
+            # errno=17 means that parent directories already exist, which is fine
+            if e.errno != 17: raise
+        finally:
+            os.umask(umask_old)
+
+        self.lockfile = open(path, 'w+')
+        portalocker.lock(self.lockfile, portalocker.LOCK_EX | portalocker.LOCK_NB)
+
+    def unlock(self, layer, coord, format):
+        self.lockfile.close()
+        os.remove(self.lockfile.name)
+        self.lockfile = None
 
     def remove(self, layer, coord, format):
-        """ Remove a cached tile.
-        """
         fullpath = self._fullpath(layer, coord, format)
 
         try:
             os.remove(fullpath)
         except OSError, e:
             # errno=2 means that the file does not exist, which is fine
-            if e.errno != 2:
-                raise
+            if e.errno != 2: raise
 
     def read(self, layer, coord, format):
-        """ Read a cached tile.
-        """
         fullpath = self._fullpath(layer, coord, format)
 
         if not exists(fullpath):
             return None
 
-        age = time.time() - os.stat(fullpath).st_mtime
-
-        if layer.cache_lifespan and age > layer.cache_lifespan:
-            return None
-
-        elif self._is_compressed(format):
+        if self._is_compressed(format):
             return gzip.open(fullpath, 'r').read()
 
         else:
@@ -301,16 +264,13 @@ class Disk:
             return body
 
     def save(self, body, layer, coord, format):
-        """ Save a cached tile.
-        """
+        umask_old = os.umask(self.umask)
         fullpath = self._fullpath(layer, coord, format)
 
         try:
-            umask_old = os.umask(self.umask)
             os.makedirs(dirname(fullpath), 0777&~self.umask)
         except OSError, e:
-            if e.errno != 17:
-                raise
+            if e.errno != 17: raise
         finally:
             os.umask(umask_old)
 

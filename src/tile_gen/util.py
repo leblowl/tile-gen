@@ -19,15 +19,15 @@ def load_class_path(classpath):
     _class = eval(objname, module.__dict__)
     return _class
 
-def get_type_by_ext(self, extension):
-    if extension.lower() == 'json':
+def get_type_by_ext(ext):
+    if ext.lower() == 'json':
         return 'application/json', 'JSON'
 
-    elif extension.lower() == 'topojson':
+    elif ext.lower() == 'topojson':
         return 'application/json', 'TopoJSON'
 
-    elif extension.lower() == 'mvt':
+    elif ext.lower() == 'mvt':
         return 'application/x-protobuf', 'MVT'
 
     else:
-        raise ValueError(extension + " is not a valid extension for responses with multiple layers")
+        raise ValueError(ext + " is not a valid extension")
