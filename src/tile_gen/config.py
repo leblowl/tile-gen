@@ -41,8 +41,8 @@ The "layers" section is a dictionary of layer names. Example:
 """
 
 import sys
+import tile_gen.layer
 import tile_gen.caches as caches
-import tile_gen.layer as layer
 import tile_gen.geography as geography
 from sys import stderr, modules
 from json import dumps
@@ -117,7 +117,7 @@ def parse_config_layer(name, layer_dict):
     if 'tile height' in layer_dict:
         tile_height = int(layer_dict['tile height'])
 
-    layer = layer.Layer(name, projection, tile_height)
+    layer = tile_gen.layer.Layer(name, projection, tile_height)
 
     return layer
 
