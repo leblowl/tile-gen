@@ -21,6 +21,7 @@ A layer represents a set of tiles:
 """
 
 import tile_gen.util as u
+import tile_gen.geography as geo
 
 def make_transform_fn(transform_fns):
     if not transform_fns:
@@ -56,13 +57,12 @@ class Layer:
           dim:
             Height & width of square tile in pixels, as a single integer.
     """
-    def __init__(self, name, projection, queries,
+    def __init__(self, name, projection='spherical mercator', queries=[],
                  srid=900913, dim=256, clip=True, simplify=1.0,
                  geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
 
         self.name = name
-        self.projection = projection
-
+        self.projection = geo.getProjectionByName(projection)
         self.queries = []
         self.columns = {}
         for query in queries:

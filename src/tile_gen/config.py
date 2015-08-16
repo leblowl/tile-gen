@@ -44,9 +44,8 @@ import sys
 import tile_gen.util as u
 import tile_gen.layer
 import tile_gen.caches as caches
-import tile_gen.geography as geography
 from tile_gen.vectiles.server import Provider
-from sys import stderr, modules
+from sys import stderr
 from json import dumps
 
 class Configuration:
@@ -106,15 +105,7 @@ def parse_provider(provider_dict):
     return Provider(provider_dict.get('dbinfo', {}))
 
 def parse_layer(name, layer_dict):
-    projection = layer_dict.get('projection', 'spherical mercator')
-    projection = geography.getProjectionByName(projection)
-    queries = layer_dict.get('queries', [])
-
-    # TODO: get all arguments to layer & pass in as kwargs
-
-    layer = tile_gen.layer.Layer(name, projection, queries)
-
-    return layer
+    return tile_gen.layer.Layer(name, **layer_dict)
 
 def parse_layers(layers_dict):
     layers = {}

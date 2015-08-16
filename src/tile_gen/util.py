@@ -1,6 +1,7 @@
 import os
 import sys
 import __builtin__
+from sys import  modules
 
 def open(filename):
     for path in sys.path:
