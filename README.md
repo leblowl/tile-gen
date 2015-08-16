@@ -26,6 +26,6 @@ pip install -e .
 ##### REPL
 ```shell
 python setup.py repl
->>> import tile_gen.app as tile_gen
+>>> import tile_gen.core as tile_gen
 >>> tile_gen.get_tile('all', 0, 0, 0, 'mvt')
 ```
