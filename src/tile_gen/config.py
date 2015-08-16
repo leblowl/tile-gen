@@ -41,6 +41,7 @@ The "layers" section is a dictionary of layer names. Example:
 """
 
 import sys
+import tile_gen.util as u
 import tile_gen.layer
 import tile_gen.caches as caches
 import tile_gen.geography as geography
@@ -90,7 +91,7 @@ def parse_cache(cache_dict):
             raise Exception('Unknown cache: %s' % cache_dict['name'])
 
     elif 'class' in cache_dict:
-        _class = load_class_path(cache_dict['class'])
+        _class = u.load_class_path(cache_dict['class'])
         kwargs = cache_dict.get('kwargs', {})
         kwargs = dict( [(str(k), v) for (k, v) in kwargs.items()] )
 
@@ -131,14 +132,3 @@ def build_config(config_dict):
     layers     = parse_layers(config_dict.get('layers', {}))
 
     return Configuration(cache, provider, layers)
-
-
-def load_class_path(classpath):
-    """ Load external class based on a path.
-        Example classpath: "Module.Submodule.Classname".
-    """
-    modname, objname = classpath.rsplit('.', 1)
-    __import__(modname)
-    module = modules[modname]
-    _class = eval(objname, module.__dict__)
-    return _class

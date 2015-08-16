@@ -5,7 +5,7 @@ precision reduced and often clipped.
 '''
 
 import json
-import tile_gen.util as util
+import tile_gen.util as u
 import tile_gen.vectiles.mvt as mvt
 import tile_gen.vectiles.geojson as geojson
 import tile_gen.vectiles.topojson as topojson
@@ -20,7 +20,6 @@ from psycopg2 import connect
 from psycopg2.extensions import TransactionRollbackError
 from ModestMaps.Core import Point
 from tile_gen.geography import SphericalMercator
-from tile_gen.config import load_class_path
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
@@ -37,7 +36,7 @@ def make_transform_fn(transform_fns):
 def resolve_transform_fns(fn_dotted_names):
     if not fn_dotted_names:
         return None
-    return map(load_class_path, fn_dotted_names)
+    return map(u.load_class_path, fn_dotted_names)
 
 def query_columns(dbinfo, srid, query, bounds):
     ''' Get set of column names for query
