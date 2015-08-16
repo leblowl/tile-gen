@@ -23,7 +23,8 @@ def get_tile(layer, z, x, y, ext, ignore_cached = False):
             buff = StringIO()
             tile = provider.render_tile(layer, coord)
             tile.save(buff, format)
-            cache.save(buff.getvalue(), layer, coord, format)
+            body = buff.getvalue()
+            cache.save(body, layer, coord, format)
     finally:
         cache.unlock(layer, coord, format)
 
