@@ -59,7 +59,7 @@ class Layer:
     """
     def __init__(self, name, projection='spherical mercator', queries=[],
                  srid=900913, dim=256, clip=True, simplify=1.0,
-                 geometry_types=None, transform_fns=None, sort_fn=None, simplify_before_intersect=False):
+                 geometry_types=None, transform_fns=None, sort_fn=None):
 
         self.name = name
         self.projection = geo.getProjectionByName(projection)
@@ -87,4 +87,3 @@ class Layer:
         else:
             self.sort_fn_name = None
             self.sort_fn = None
-        self.simplify_before_intersect = simplify_before_intersect

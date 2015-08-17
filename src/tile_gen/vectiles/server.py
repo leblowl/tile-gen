@@ -64,7 +64,7 @@ def get_features(dbinfo, query, geometry_types, transform_fn, sort_fn):
 
     return features
 
-def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None, simplify_before_intersect=False):
+def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
 
@@ -79,51 +79,36 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
     # tile and then simplifying everything inside of it, as we do with all of
     # the other layers).
 
-    if simplify_before_intersect:
-        # Simplify, then cut tile.
+    if tolerance is not None:
+        # The problem with simplifying all contained/overlapping geometries
+        # for a tile before cutting out the parts that actually lie inside
+        # of it is that we might end up simplifying a massive geometry just
+        # to extract a small portion of it (think simplifying the border of
+        # the US just to extract the New York City coastline). To reduce the
+        # performance hit, we actually identify all of the candidate
+        # geometries, then cut out a bounding box *slightly larger* than the
+        # tile bbox, THEN simplify, and only then cut out the tile itself.
+        # This still allows us to perform simplification of the geometry
+        # edges outside of the tile, which prevents any seams from forming
+        # when we cut it out, but means that we don't have to simplify the
+        # entire geometry (just the small bits lying right outside the
+        # desired tile).
 
-        if tolerance is not None:
-            # The problem with simplifying all contained/overlapping geometries
-            # for a tile before cutting out the parts that actually lie inside
-            # of it is that we might end up simplifying a massive geometry just
-            # to extract a small portion of it (think simplifying the border of
-            # the US just to extract the New York City coastline). To reduce the
-            # performance hit, we actually identify all of the candidate
-            # geometries, then cut out a bounding box *slightly larger* than the
-            # tile bbox, THEN simplify, and only then cut out the tile itself.
-            # This still allows us to perform simplification of the geometry
-            # edges outside of the tile, which prevents any seams from forming
-            # when we cut it out, but means that we don't have to simplify the
-            # entire geometry (just the small bits lying right outside the
-            # desired tile).
+        simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
+        simplification_bbox = (
+            'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
+            'ST_MakePoint(%.12f, %.12f))' % (
+                bounds[0] - simplification_padding,
+                bounds[1] - simplification_padding,
+                bounds[2] + simplification_padding,
+                bounds[3] + simplification_padding))
+        simplification_bbox = 'ST_SetSrid(%s, %d)' % (simplification_bbox, srid)
 
-            simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
-            simplification_bbox = (
-                'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
-                'ST_MakePoint(%.12f, %.12f))' % (
-                    bounds[0] - simplification_padding,
-                    bounds[1] - simplification_padding,
-                    bounds[2] + simplification_padding,
-                    bounds[3] + simplification_padding))
-            simplification_bbox = 'ST_SetSrid(%s, %d)' % (
-                simplification_bbox, srid)
-
-            geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
-            geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (
-                geom, tolerance)
-
-        assert is_clipped, 'If simplify_before_intersect=True, ' \
-            'is_clipped should be True as well'
-        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-
-    else:
-        # Cut tile, then simplify.
+        geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
+        geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (geom, tolerance)
 
         if is_clipped:
             geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-
-        if tolerance is not None:
-            geom = 'ST_SimplifyPreserveTopology(%s, %.12f)' % (geom, tolerance)
 
     if is_geo:
         geom = 'ST_Transform(%s, 4326)' % geom
@@ -202,10 +187,9 @@ class Response:
 
         srid = layer.srid
         clip = layer.clip
-        simplify_before_intersect = layer.simplify_before_intersect
 
-        geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip, simplify_before_intersect=simplify_before_intersect)
-        mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents, simplify_before_intersect=simplify_before_intersect)
+        geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip)
+        mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt.padding * tolerances[coord.zoom], mvt.extents)
         self.query = dict(TopoJSON=geo_query, JSON=geo_query, MVT=mvt_query)
 
     def save(self, out, format):
