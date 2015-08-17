@@ -7,7 +7,7 @@ import tile_gen.util as u
 config = c.build_config(json.load(u.open("tile-gen.cfg")))
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
-    if layer not in config.layers: raise IOError("Layer not found: " + layer)
+    if layer not in config.layers: raise ValueError("Layer not found: " + layer)
 
     cache    = config.cache
     provider = config.provider
