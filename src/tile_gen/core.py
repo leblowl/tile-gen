@@ -4,7 +4,7 @@ import json
 import tile_gen.config as c
 import tile_gen.util as u
 
-config = c.build_config(json.load(u.open("tilestache.cfg")))
+config = c.build_config(json.load(u.open("tile-gen.cfg")))
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
     if layer not in config.layers: raise IOError("Layer not found: " + layer)
