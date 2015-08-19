@@ -151,7 +151,7 @@ def encode(file, features, bounds):
 
     json.dump(result, file, separators=(',', ':'))
 
-def merge(file, names, inputs, config, coord):
+def merge(file, names, inputs):
     ''' Retrieve a list of TopoJSON tile responses and merge them into one.
 
         get_tiles() retrieves data and performs basic integrity checks.

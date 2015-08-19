@@ -1,16 +1,15 @@
 from StringIO import StringIO
 from ModestMaps.Core import Coordinate
-import json
-import tile_gen.config as c
 import tile_gen.util as u
+import tile_gen.config as c
+import tile_gen.vectiles.provider as provider
 
-config = c.build_config(json.load(u.open("tile-gen.cfg")))
+config = c.configuration('tile-gen.cfg')
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
-    if layer not in config.layers: raise ValueError("Layer not found: " + layer)
+    if layer not in config.layers: raise ValueError('Layer not found: ' + layer)
 
     cache    = config.cache
-    provider = config.provider
     layer    = config.layers[layer]
     coord    = Coordinate(y, x, z)
     mimetype, format = u.get_type_by_ext(ext)
@@ -20,10 +19,7 @@ def get_tile(layer, z, x, y, ext, ignore_cached = False):
         body = cache.read(layer, coord, format) if not ignore_cached else None
 
         if body is None:
-            buff = StringIO()
-            tile = provider.render_tile(layer, coord)
-            tile.save(buff, format)
-            body = buff.getvalue()
+            body = provider.render_tile(layer, coord, format)
             cache.save(body, layer, coord, format)
     finally:
         cache.unlock(layer, coord, format)

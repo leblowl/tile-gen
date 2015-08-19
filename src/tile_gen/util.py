@@ -32,3 +32,11 @@ def get_type_by_ext(ext):
 
     else:
         raise ValueError(ext + " is not a valid extension")
+
+def bounds(projection, coord):
+    ll = projection.coordinateProj(coord.down())
+    ur = projection.coordinateProj(coord.right())
+    return ll.x, ll.y, ur.x, ur.y
+
+def comp(*functions):
+    return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)

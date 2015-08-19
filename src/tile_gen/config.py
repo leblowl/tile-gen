@@ -41,28 +41,19 @@ The "layers" section is a dictionary of layer names. Example:
 """
 
 import sys
+import json
 import tile_gen.util as u
 import tile_gen.layer
 import tile_gen.caches as caches
-from tile_gen.vectiles.server import Provider
+import tile_gen.vectiles.provider as provider
 from sys import stderr
-from json import dumps
 
-class Configuration:
-    """ A complete site configuration, with a collection of Layer objects.
-
-        Attributes:
-
-          cache:
-            Cache instance, e.g. tile_gen.caches.Disk etc.
-
-          layers:
-            Dictionary of layers keyed by name.
-    """
-    def __init__(self, cache, provider, layers):
-        self.cache = cache
-        self.provider = provider
-        self.layers = layers
+class configuration:
+    def __init__(self, path):
+        config = json.load(u.open(path))
+        provider.init(config.get('provider', {}).get('dbinfo', {}))
+        self.cache      = parse_cache(config.get('cache', {}))
+        self.layers     = parse_layers(config.get('layers', {}))
 
 def parse_cache(cache_dict):
     if 'name' in cache_dict:
@@ -95,14 +86,11 @@ def parse_cache(cache_dict):
         kwargs = dict( [(str(k), v) for (k, v) in kwargs.items()] )
 
     else:
-        raise Exception('Missing required cache name or class: %s' % dumps(cache_dict))
+        raise Exception('Missing required cache name or class: %s' % json.dumps(cache_dict))
 
     cache = _class(**kwargs)
 
     return cache
-
-def parse_provider(provider_dict):
-    return Provider(provider_dict.get('dbinfo', {}))
 
 def parse_layer(name, layer_dict):
     return tile_gen.layer.Layer(name, **layer_dict)
@@ -113,12 +101,3 @@ def parse_layers(layers_dict):
         layers[name] = parse_layer(name, layer_dict)
 
     return layers
-
-def build_config(config_dict):
-    """ Build a configuration dictionary into a Configuration object.
-    """
-    cache      = parse_cache(config_dict.get('cache', {}))
-    provider   = parse_provider(config_dict.get('provider', {}))
-    layers     = parse_layers(config_dict.get('layers', {}))
-
-    return Configuration(cache, provider, layers)

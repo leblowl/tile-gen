@@ -1,5 +1,7 @@
 import tile_gen.util as u
 import tile_gen.geography as geo
+import tile_gen.vectiles.provider as provider
+from ModestMaps.Core import Coordinate
 
 def make_transform_fn(transform_fns):
     if not transform_fns:
@@ -85,8 +87,8 @@ class Layer:
 
         self.name = name
         self.projection = geo.getProjectionByName(projection)
+        self.srid = int(srid)
         self.queries = []
-        self.columns = {}
         for query in queries:
             if query:
                 try:
@@ -96,16 +98,13 @@ class Layer:
 
             self.queries.append(query)
 
-        self.srid = int(srid)
+        bounds = u.bounds(self.projection, Coordinate(0, 0, 0))
+        self.columns = {q: provider.get_columns(self.srid, q, bounds) for q in self.queries}
         self.dim = dim
         self.clip = clip
         self.simplify = float(simplify)
         self.geometry_types = None if geometry_types is None else set(geometry_types)
         self.transform_fn_names = transform_fns
         self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
-        if sort_fn:
-            self.sort_fn_name = sort_fn
-            self.sort_fn = u.load_class_path(sort_fn)
-        else:
-            self.sort_fn_name = None
-            self.sort_fn = None
+        self.sort_fn_name = sort_fn
+        self.sort_fn = u.load_class_path(sort_fn) if sort_fn else None
