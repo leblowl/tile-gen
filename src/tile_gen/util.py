@@ -4,11 +4,12 @@ import __builtin__
 from sys import  modules
 
 def open(filename):
-    for path in sys.path:
-        path = os.path.join(path, filename)
-        if os.path.exists(path):
-            return __builtin__.open(path)
-    raise IOError('File not found: ' + filename)
+    if filename:
+        for path in sys.path:
+            path = os.path.join(path, filename)
+            if os.path.exists(path):
+                return __builtin__.open(path)
+        raise IOError('File not found: ' + filename)
 
 def load_class_path(classpath):
     """ Load external class based on a path.

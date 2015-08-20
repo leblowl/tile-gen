@@ -147,7 +147,7 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
 def query_features(layer, coord, bounds, format):
     srid = layer.srid
     query = layer.queries[coord.zoom]
-    columns = layer.columns[query]
+    columns = get_columns(srid, query, bounds)
     tolerance = tolerance(layer, coord)
     clip = layer.clip
     mvt_padding = mvt.padding * tolerances[coord.zoom]

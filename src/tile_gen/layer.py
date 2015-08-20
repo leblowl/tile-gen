@@ -1,7 +1,13 @@
 import tile_gen.util as u
 import tile_gen.geography as geo
-import tile_gen.vectiles.provider as provider
 from ModestMaps.Core import Coordinate
+
+def parse_query(q):
+    try:
+        q = u.open(q).read()
+    except IOError:
+        pass
+    return q
 
 def make_transform_fn(transform_fns):
     if not transform_fns:
@@ -88,18 +94,7 @@ class Layer:
         self.name = name
         self.projection = geo.getProjectionByName(projection)
         self.srid = int(srid)
-        self.queries = []
-        for query in queries:
-            if query:
-                try:
-                    query = u.open(query).read()
-                except IOError:
-                    pass
-
-            self.queries.append(query)
-
-        bounds = u.bounds(self.projection, Coordinate(0, 0, 0))
-        self.columns = {q: provider.get_columns(self.srid, q, bounds) for q in self.queries}
+        self.queries = map(parse_query, queries)
         self.dim = dim
         self.clip = clip
         self.simplify = float(simplify)
