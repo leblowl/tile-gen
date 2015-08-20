@@ -179,10 +179,6 @@ def encode(out, name, features, coord, bounds, format):
 def render_tile(layer, coord, format):
     buff = StringIO()
     bounds = u.bounds(layer.projection, coord)
-
-    # handle empty response
-    if not query: print('EMPTY RESPONSE')
-
     features = query_features(layer, coord, bounds, format)
     print(features)
     encode(buff, layer.name, features, coord, bounds, format)
