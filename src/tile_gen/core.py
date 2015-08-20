@@ -1,4 +1,3 @@
-from StringIO import StringIO
 from ModestMaps.Core import Coordinate
 import tile_gen.util as u
 import tile_gen.config as c

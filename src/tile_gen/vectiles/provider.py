@@ -5,17 +5,17 @@ precision reduced and often clipped.
 '''
 
 import json
+import shapely.wkb
 import tile_gen.util as u
 import tile_gen.vectiles.mvt as mvt
 import tile_gen.vectiles.geojson as geojson
 import tile_gen.vectiles.topojson as topojson
+from tile_gen.geography import SphericalMercator
+from StringIO import StringIO
 from math import pi
-from shapely.wkb import dumps
-from shapely.wkb import loads
 from psycopg2.extras import RealDictCursor
 from psycopg2 import connect
 from ModestMaps.Core import Point
-from tile_gen.geography import SphericalMercator
 
 tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 db = None
@@ -49,7 +49,7 @@ def get_features(query, geometry_types, transform_fn, sort_fn):
 
         wkb = bytes(row.pop('__geometry__'))
         id = row.pop('__id__')
-        shape = loads(wkb)
+        shape = shapely.wkb.loads(wkb)
 
         if geometry_types is not None:
             if shape.type not in geometry_types:
@@ -59,7 +59,7 @@ def get_features(query, geometry_types, transform_fn, sort_fn):
 
         if transform_fn:
             shape, props, id = transform_fn(shape, props, id)
-            wkb = dumps(shape)
+            wkb = shapely.wkb.dumps(shape)
 
         features.append((wkb, props, id))
 
