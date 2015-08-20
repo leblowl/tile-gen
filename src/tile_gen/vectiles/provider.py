@@ -21,7 +21,8 @@ tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 db = None
 
 def init(dbinfo):
-    connect(**dbinfo).set_session(readonly=True, autocommit=True)
+    conn = connect(**dbinfo)
+    conn.set_session(readonly=True, autocommit=True)
     db = conn.cursor(cursor_factory=RealDictCursor)
 
 def tolerance(layer, coord):
