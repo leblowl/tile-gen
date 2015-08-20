@@ -3,10 +3,11 @@ import tile_gen.geography as geo
 from ModestMaps.Core import Coordinate
 
 def parse_query(q):
-    try:
-        q = u.open(q).read()
-    except IOError:
-        pass
+    if q:
+        try:
+            q = u.open(q).read()
+        except IOError:
+            pass
     return q
 
 def make_transform_fn(transform_fns):

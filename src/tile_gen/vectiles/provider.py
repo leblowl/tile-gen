@@ -127,9 +127,6 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
     subquery = subquery.replace('!bbox!', bbox)
     columns = ['q."%s"' % c for c in subcolumns if c not in ('__geometry__', )]
 
-    if '__geometry__' not in subcolumns:
-        raise Exception("There's supposed to be a __geometry__ column.")
-
     if '__id__' not in subcolumns:
         columns.append('Substr(MD5(ST_AsBinary(q.__geometry__)), 1, 10) AS __id__')
 
