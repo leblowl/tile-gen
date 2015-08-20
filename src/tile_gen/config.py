@@ -48,7 +48,7 @@ import tile_gen.caches as caches
 import tile_gen.vectiles.provider as provider
 from sys import stderr
 
-class configuration:
+class Configuration:
     def __init__(self, path):
         config = json.load(u.open(path))
         provider.init(config.get('provider', {}).get('dbinfo', {}))

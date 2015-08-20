@@ -4,7 +4,7 @@ import tile_gen.util as u
 import tile_gen.config as c
 import tile_gen.vectiles.provider as provider
 
-config = c.configuration('tile-gen.cfg')
+config = c.Configuration('tile-gen.cfg')
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
     if layer not in config.layers: raise ValueError('Layer not found: ' + layer)
