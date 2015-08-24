@@ -51,7 +51,8 @@ from sys import stderr
 class Configuration:
     def __init__(self, path):
         config = json.load(u.open(path))
-        provider.init(config.get('provider', {}).get('dbinfo', {}))
+
+        self.dbinfo     = config.get('provider', {}).get('dbinfo', {})
         self.cache      = parse_cache(config.get('cache', {}))
         self.layers     = parse_layers(config.get('layers', {}))
 
