@@ -26,7 +26,7 @@ def init(dbinfo):
     conn.set_session(readonly=True, autocommit=True)
     db = conn.cursor(cursor_factory=RealDictCursor)
 
-def tolerance(layer, coord):
+def get_tolerance(layer, coord):
     return layer.simplify * tolerances[coord.zoom]
 
 def get_columns(srid, query, bounds):
@@ -146,7 +146,7 @@ def query_features(layer, coord, bounds, format):
     srid = layer.srid
     query = layer.queries[coord.zoom]
     columns = get_columns(srid, query, bounds)
-    tolerance = tolerance(layer, coord)
+    tolerance = get_tolerance(layer, coord)
     clip = layer.clip
     mvt_padding = mvt.padding * tolerances[coord.zoom]
 
