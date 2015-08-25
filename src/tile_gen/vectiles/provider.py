@@ -181,7 +181,6 @@ def render_tile(layer, coord, format):
     buff = StringIO()
     bounds = u.bounds(layer.projection, coord)
     features = query_features(layer, coord, bounds, format)
-    print(features)
     encode(buff, layer.name, features, coord, bounds, format)
     return buff.getvalue()
 
