@@ -4,7 +4,6 @@ VecTiles is intended for rendering, and returns tiles with contents simplified,
 precision reduced and often clipped.
 '''
 
-import json
 import shapely.wkb
 import tile_gen.util as u
 import tile_gen.vectiles.mvt as mvt
