@@ -29,17 +29,6 @@ def init(dbinfo):
 def get_tolerance(layer, coord):
     return layer.simplify * tolerances[coord.zoom]
 
-def get_columns(srid, query, bounds):
-    ''' Get set of column names for query
-    '''
-
-    bbox = 'ST_MakeBox2D(ST_MakePoint(%f, %f), ST_MakePoint(%f, %f))' % bounds
-    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
-
-    # newline is important here, to break out of comments.
-    db.execute(query.replace('!bbox!', bbox) + '\n LIMIT 0')
-    return set(x.name for x in db.description)
-
 def get_features(query, geometry_types, transform_fn, sort_fn):
     features = []
 
@@ -69,7 +58,7 @@ def get_features(query, geometry_types, transform_fn, sort_fn):
 
     return features
 
-def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
+def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
 
@@ -78,27 +67,7 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
     bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
     geom = 'q.__geometry__'
 
-    # To get around this, for any given tile bounding box, we find the
-    # contained/overlapping geometries and simplify them BEFORE
-    # cutting out the precise tile bounding bbox (instead of cutting out the
-    # tile and then simplifying everything inside of it, as we do with all of
-    # the other layers).
-
-    if tolerance is not None:
-        # The problem with simplifying all contained/overlapping geometries
-        # for a tile before cutting out the parts that actually lie inside
-        # of it is that we might end up simplifying a massive geometry just
-        # to extract a small portion of it (think simplifying the border of
-        # the US just to extract the New York City coastline). To reduce the
-        # performance hit, we actually identify all of the candidate
-        # geometries, then cut out a bounding box *slightly larger* than the
-        # tile bbox, THEN simplify, and only then cut out the tile itself.
-        # This still allows us to perform simplification of the geometry
-        # edges outside of the tile, which prevents any seams from forming
-        # when we cut it out, but means that we don't have to simplify the
-        # entire geometry (just the small bits lying right outside the
-        # desired tile).
-
+    if tolerance > 0:
         simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
         simplification_bbox = (
             'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
@@ -112,8 +81,8 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
         geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
         geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (geom, tolerance)
 
-        if is_clipped:
-            geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
+    if is_clipped:
+        geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
 
     if is_geo:
         geom = 'ST_Transform(%s, 4326)' % geom
@@ -126,18 +95,9 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
                    scale / (bounds[3] - bounds[1])))
 
     subquery = subquery.replace('!bbox!', bbox)
-    columns = ['q."%s"' % c for c in subcolumns if c not in ('__geometry__', )]
 
-    if '__id__' not in subcolumns:
-        columns.append('Substr(MD5(ST_AsBinary(q.__geometry__)), 1, 10) AS __id__')
-
-    columns = ', '.join(columns)
-
-    return '''SELECT %(columns)s,
-                     ST_AsBinary(%(geom)s) AS __geometry__
-              FROM (
-                %(subquery)s
-                ) AS q
+    return '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
+              FROM (%(subquery)s) AS q
               WHERE ST_IsValid(q.__geometry__)
                 AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
             % locals()
@@ -145,13 +105,12 @@ def build_query(srid, subquery, subcolumns, bounds, tolerance, is_geo, is_clippe
 def query_features(layer, coord, bounds, format):
     srid = layer.srid
     query = layer.queries[coord.zoom]
-    columns = get_columns(srid, query, bounds)
     tolerance = get_tolerance(layer, coord)
     clip = layer.clip
     mvt_padding = mvt.padding * tolerances[coord.zoom]
 
-    geo_query = build_query(srid, query, columns, bounds, tolerance, True, clip)
-    mvt_query = build_query(srid, query, columns, bounds, tolerance, False, clip, mvt_padding, mvt.extents)
+    geo_query = build_query(srid, query, bounds, tolerance, True, clip)
+    mvt_query = build_query(srid, query, bounds, tolerance, False, clip, mvt_padding, mvt.extents)
     queries = {'JSON':      geo_query,
                'TopoJSON':  geo_query,
                'MVT':       mvt_query}
