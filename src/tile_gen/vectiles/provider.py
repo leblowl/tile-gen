@@ -29,7 +29,7 @@ def init(dbinfo):
 def get_tolerance(layer, coord):
     return layer.simplify * tolerances[coord.zoom]
 
-def get_features(query, geometry_types, transform_fn, sort_fn):
+def query_features(query, geometry_types, transform_fn, sort_fn):
     features = []
 
     db.execute(query)
@@ -102,24 +102,23 @@ def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0
                 AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
             % locals()
 
-def query_features(layer, coord, bounds, format):
-    srid = layer.srid
+def get_features(layer, coord, bounds, format):
     query = layer.queries[coord.zoom]
-    tolerance = get_tolerance(layer, coord)
-    clip = layer.clip
-    mvt_padding = mvt.padding * tolerances[coord.zoom]
+    if not query: return []
+    else:
+        srid = layer.srid
+        tolerance = get_tolerance(layer, coord)
+        clip = layer.clip
+        mvt_padding = mvt.padding * tolerances[coord.zoom]
 
-    geo_query = build_query(srid, query, bounds, tolerance, True, clip)
-    mvt_query = build_query(srid, query, bounds, tolerance, False, clip, mvt_padding, mvt.extents)
-    queries = {'JSON':      geo_query,
-               'TopoJSON':  geo_query,
-               'MVT':       mvt_query}
+        geo_query = build_query(srid, query, bounds, tolerance, True, clip)
+        mvt_query = build_query(srid, query, bounds, tolerance, False, clip, mvt_padding, mvt.extents)
+        queries = {'JSON': geo_query, 'TopoJSON': geo_query, 'MVT': mvt_query}
+        geometry_types = layer.geometry_types
+        transform_fn = layer.transform_fn
+        sort_fn = layer.sort_fn
 
-    geometry_types = layer.geometry_types
-    transform_fn = layer.transform_fn
-    sort_fn = layer.sort_fn
-
-    return get_features(queries[format], geometry_types, transform_fn, sort_fn)
+        return query_features(queries[format], geometry_types, transform_fn, sort_fn)
 
 def encode(out, name, features, coord, bounds, format):
     if format == 'MVT':
@@ -139,7 +138,7 @@ def encode(out, name, features, coord, bounds, format):
 def render_tile(layer, coord, format):
     buff = StringIO()
     bounds = u.bounds(layer.projection, coord)
-    features = query_features(layer, coord, bounds, format)
+    features = get_features(layer, coord, bounds, format)
     encode(buff, layer.name, features, coord, bounds, format)
     return buff.getvalue()
 
@@ -169,18 +168,3 @@ def render_tiles(layers, coord, format):
     buff = StringIO()
     tile = merge(buff, layers, coord, format)
     return buff.getvalue()
-
-def render_empty_tile(out, format, bounds):
-    if format == 'MVT':
-        mvt.encode(out, None, [])
-
-    elif format == 'JSON':
-        geojson.encode(out, [], 0)
-
-    elif format == 'TopoJSON':
-        ll = SphericalMercator().projLocation(Point(*bounds[0:2]))
-        ur = SphericalMercator().projLocation(Point(*bounds[2:4]))
-        topojson.encode(out, [], (ll.lon, ll.lat, ur.lon, ur.lat))
-
-    else:
-        raise ValueError(format + " is not supported")
