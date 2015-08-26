@@ -1,9 +1,3 @@
-''' Provider that returns PostGIS vector tiles in GeoJSON or MVT format.
-
-VecTiles is intended for rendering, and returns tiles with contents simplified,
-precision reduced and often clipped.
-'''
-
 import json
 import shapely.wkb
 import tile_gen.util as u
