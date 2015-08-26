@@ -135,13 +135,6 @@ def encode(out, name, features, coord, bounds, format):
     else:
         raise ValueError(format + " is not supported")
 
-def render_tile(layer, coord, format):
-    buff = StringIO()
-    bounds = u.bounds(layer.projection, coord)
-    features = get_features(layer, coord, bounds, format)
-    encode(buff, layer.name, features, coord, bounds, format)
-    return buff.getvalue()
-
 def merge(out, layers, coord, format):
     if format == 'MVT':
         def get_feature_layer(layer):
@@ -161,7 +154,14 @@ def merge(out, layers, coord, format):
         else:
             raise ValueError(format + " is not supported for responses with multiple layers")
 
-def render_tiles(layers, coord, format):
+def render_tile(lols, coord, format):
     buff = StringIO()
-    tile = merge(buff, layers, coord, format)
+
+    if type(lols) is list:
+        merge(buff, lols, coord, format)
+    else:
+        bounds = u.bounds(lols.projection, coord)
+        features = get_features(lols, coord, bounds, format)
+        encode(buff, lols.name, features, coord, bounds, format)
+
     return buff.getvalue()
