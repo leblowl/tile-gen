@@ -11,16 +11,6 @@ def decode(file):
     data = mapbox_vector_tile.decode(tile)
     return data # print data or write to file?
 
-def encode(file, name, features):
-    layers = [get_feature_layer(name, features)]
-    data = mapbox_vector_tile.encode(layers)
-    file.write(data)
-
-def merge(file, feature_layers):
-    layers = map(lambda x : get_feature_layer(x['name'], x['features']), feature_layers)
-    data = mapbox_vector_tile.encode(layers)
-    file.write(data)
-
 def get_feature_layer(name, features):
     _features = []
 
@@ -36,3 +26,13 @@ def get_feature_layer(name, features):
         'name': name or '',
         'features': _features
     }
+
+def encode(file, name, features):
+    layers = [get_feature_layer(name, features)]
+    data = mapbox_vector_tile.encode(layers)
+    file.write(data)
+
+def merge(file, feature_layers):
+    layers = map(lambda x : get_feature_layer(**x), feature_layers)
+    data = mapbox_vector_tile.encode(layers)
+    file.write(data)

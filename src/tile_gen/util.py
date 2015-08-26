@@ -1,6 +1,7 @@
 import os
 import sys
 import __builtin__
+import functools
 from sys import  modules
 
 def open(filename):
@@ -40,3 +41,9 @@ def bounds(projection, coord):
 
 def comp(*functions):
     return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
+
+def xs_get(xs, ndx, default):
+    try:
+        return xs[ndx]
+    except IndexError:
+        return default

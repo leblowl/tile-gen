@@ -4,6 +4,7 @@ VecTiles is intended for rendering, and returns tiles with contents simplified,
 precision reduced and often clipped.
 '''
 
+import json
 import shapely.wkb
 import tile_gen.util as u
 import tile_gen.vectiles.mvt as mvt
@@ -27,35 +28,6 @@ def init(dbinfo):
 
 def get_tolerance(layer, coord):
     return layer.simplify * tolerances[coord.zoom]
-
-def query_features(query, geometry_types, transform_fn, sort_fn):
-    features = []
-
-    db.execute(query)
-    for row in db.fetchall():
-        assert '__geometry__' in row, 'Missing __geometry__ in feature result'
-        assert '__id__' in row, 'Missing __id__ in feature result'
-
-        wkb = bytes(row.pop('__geometry__'))
-        id = row.pop('__id__')
-        shape = shapely.wkb.loads(wkb)
-
-        if geometry_types is not None:
-            if shape.type not in geometry_types:
-                continue
-
-        props = dict((k, v) for k, v in row.items() if v is not None)
-
-        if transform_fn:
-            shape, props, id = transform_fn(shape, props, id)
-            wkb = shapely.wkb.dumps(shape)
-
-        features.append((wkb, props, id))
-
-    if sort_fn:
-        features = sort_fn(features)
-
-    return features
 
 def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
@@ -101,8 +73,37 @@ def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0
                 AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
             % locals()
 
+def query_features(query, geometry_types, transform_fn, sort_fn):
+    features = []
+
+    db.execute(query)
+    for row in db.fetchall():
+        assert '__geometry__' in row, 'Missing __geometry__ in feature result'
+        assert '__id__' in row, 'Missing __id__ in feature result'
+
+        wkb = bytes(row.pop('__geometry__'))
+        id = row.pop('__id__')
+        shape = shapely.wkb.loads(wkb)
+
+        if geometry_types is not None:
+            if shape.type not in geometry_types:
+                continue
+
+        props = dict((k, v) for k, v in row.items() if v is not None)
+
+        if transform_fn:
+            shape, props, id = transform_fn(shape, props, id)
+            wkb = shapely.wkb.dumps(shape)
+
+        features.append((wkb, props, id))
+
+    if sort_fn:
+        features = sort_fn(features)
+
+    return features
+
 def get_features(layer, coord, bounds, format):
-    query = layer.queries[coord.zoom]
+    query = u.xs_get(layer.queries, coord.zoom, layer.queries[-1])
     if not query: return []
     else:
         srid = layer.srid
@@ -142,26 +143,23 @@ def render_tile(layer, coord, format):
     return buff.getvalue()
 
 def merge(out, layers, coord, format):
-    names = map(lambda x : x.name, layers)
-    tiles = map(u.comp(render_tile, json.loads), layers)
-
-    if format == 'TopoJSON':
-        topojson.merge(out, names, tiles)
-    elif format == 'JSON':
-        geojson.merge(out, names, tiles, coord.zoom)
-    elif format == 'MVT':
-        feature_layers = []
-
-        for layer in layers:
+    if format == 'MVT':
+        def get_feature_layer(layer):
             bounds = u.bounds(layer.projection, coord)
-            features = query_features(layer, coord, bounds, format)
+            features = get_features(layer, coord, bounds, format)
+            return {'name': layer.name, 'features': features}
 
-            feature_layers.append({'name': layer.name,
-                                   'features': features})
-        mvt.merge(out, feature_layers, self.coord)
-
+        mvt.merge(out, map(get_feature_layer, layers))
     else:
-        raise ValueError(format + " is not supported for responses with multiple layers")
+        names = map(lambda x : x.name, layers)
+        tiles = map(lambda x : json.loads(render_tile(x, coord, format)), layers)
+
+        if format == 'TopoJSON':
+            topojson.merge(out, names, tiles)
+        elif format == 'JSON':
+            geojson.merge(out, names, tiles, coord.zoom)
+        else:
+            raise ValueError(format + " is not supported for responses with multiple layers")
 
 def render_tiles(layers, coord, format):
     buff = StringIO()

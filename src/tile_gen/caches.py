@@ -31,7 +31,7 @@ Example external cache configuration:
 A cache must provide these methods: lock(), unlock(), read(), and save().
 Each method accepts three arguments:
 
-- layer: instance of a Layer.
+- layer: layer name
 - coord: single Coordinate that represents a tile.
 - format: string like "png" or "jpg" that is used as a filename extension.
 
@@ -81,12 +81,8 @@ class Test:
         self.logfunc = logfunc
 
     def _description(self, layer, coord, format):
-        """
-        """
-        name = layer.name
         tile = '%(zoom)d/%(column)d/%(row)d' % coord.__dict__
-
-        return ' '.join( (name, tile, format) )
+        return ' '.join((layer, tile, format))
 
     def lock(self, layer, coord, format):
         """ Pretend to acquire a cache lock for this tile.
@@ -169,9 +165,7 @@ class Disk:
         return format.lower() in self.gzip
 
     def _filepath(self, layer, coord, format):
-        """
-        """
-        l = layer.name
+        l = layer
         z = '%d' % coord.zoom
         e = format.lower()
         e += self._is_compressed(format) and '.gz' or ''

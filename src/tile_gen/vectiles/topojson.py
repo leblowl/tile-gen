@@ -153,9 +153,8 @@ def encode(file, features, bounds):
 
 def merge(file, names, inputs):
     ''' Retrieve a list of TopoJSON tile responses and merge them into one.
-
-        get_tiles() retrieves data and performs basic integrity checks.
     '''
+
     transforms = [topo['transform'] for topo in inputs]
     unique_xforms = set([tuple(xform['scale'] + xform['translate']) for xform in transforms])
 
