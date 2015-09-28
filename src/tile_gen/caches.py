@@ -49,82 +49,8 @@ from tempfile import mkstemp
 from os.path import isdir, exists, dirname, basename, join as pathjoin
 
 def get_cache_by_name(name):
-    """ Retrieve a cache object by name.
-
-        Raise an exception if the name doesn't work out.
-    """
-    if name.lower() == 'test':
-        return Test
-
-    elif name.lower() == 'disk':
-        return Disk
-
-    raise Exception('Unknown cache name: "%s"' % name)
-
-class Test:
-    """ Simple cache that doesn't actually cache anything.
-
-        Activity is optionally logged, though.
-
-        Example configuration:
-
-            "cache": {
-              "name": "Test",
-              "verbose": true
-            }
-
-        Extra configuration parameters:
-        - verbose: optional boolean flag to write cache activities to a logging
-          function, defaults to False if omitted.
-    """
-    def __init__(self, logfunc=None):
-        self.logfunc = logfunc
-
-    def _description(self, layer, coord, format):
-        tile = '%(zoom)d/%(column)d/%(row)d' % coord.__dict__
-        return ' '.join((layer, tile, format))
-
-    def lock(self, layer, coord, format):
-        """ Pretend to acquire a cache lock for this tile.
-        """
-        name = self._description(layer, coord, format)
-
-        if self.logfunc:
-            self.logfunc('Test cache lock: ' + name)
-
-    def unlock(self, layer, coord, format):
-        """ Pretend to release a cache lock for this tile.
-        """
-        name = self._description(layer, coord, format)
-
-        if self.logfunc:
-            self.logfunc('Test cache unlock: ' + name)
-
-    def remove(self, layer, coord, format):
-        """ Pretend to remove a cached tile.
-        """
-        name = self._description(layer, coord, format)
-
-        if self.logfunc:
-            self.logfunc('Test cache remove: ' + name)
-
-    def read(self, layer, coord, format):
-        """ Pretend to read a cached tile.
-        """
-        name = self._description(layer, coord, format)
-
-        if self.logfunc:
-            self.logfunc('Test cache read: ' + name)
-
-        return None
-
-    def save(self, body, layer, coord, format):
-        """ Pretend to save a cached tile.
-        """
-        name = self._description(layer, coord, format)
-
-        if self.logfunc:
-            self.logfunc('Test cache save: %d bytes to %s' % (len(body), name))
+    if name.lower() == 'disk': return Disk
+    else: raise Exception('Unknown cache: %s' % name)
 
 class Disk:
     """ Caches files to disk.

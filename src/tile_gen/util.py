@@ -34,6 +34,14 @@ def get_type_by_ext(ext):
     else:
         raise ValueError(ext + " is not a valid extension")
 
+def read_query(q):
+    if q:
+        try:
+            q = u.open(q).read()
+        except IOError:
+            pass
+    return q
+
 def bounds(projection, coord):
     ll = projection.coordinateProj(coord.down())
     ur = projection.coordinateProj(coord.right())
@@ -47,3 +55,12 @@ def xs_get(xs, ndx, default):
         return xs[ndx]
     except IndexError:
         return default
+
+def get_in(m, ks): return reduce(dict.get, ks, m)
+
+def select_keys(m, ks): return { k: m.get(k) for k in ks if m.get(k) != None}
+
+def update(m, k, fn):
+    res = dict(m)
+    res[k] = fn(m[k])
+    return res

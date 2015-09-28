@@ -2,14 +2,6 @@ import tile_gen.util as u
 import tile_gen.geography as geo
 from ModestMaps.Core import Coordinate
 
-def parse_query(q):
-    if q:
-        try:
-            q = u.open(q).read()
-        except IOError:
-            pass
-    return q
-
 def make_transform_fn(transform_fns):
     if not transform_fns:
         return None
@@ -18,6 +10,7 @@ def make_transform_fn(transform_fns):
         for fn in transform_fns:
             shape, properties, fid = fn(shape, properties, fid)
         return shape, properties, fid
+
     return transform_fn
 
 def resolve_transform_fns(fn_dotted_names):
@@ -89,13 +82,14 @@ class Layer:
             fetched from the database.
     """
     def __init__(self, name, projection='spherical mercator', queries=[],
-                 srid=900913, dim=256, clip=True, simplify=1.0,
+                 query_fn = None, srid=900913, dim=256, clip=True, simplify=1.0,
                  geometry_types=None, transform_fns=None, sort_fn=None):
 
         self.name = name
         self.projection = geo.getProjectionByName(projection)
         self.srid = int(srid)
-        self.queries = map(parse_query, queries)
+        self.queries = map(u.read_query, queries)
+        self.query_fn = query_fn
         self.dim = dim
         self.clip = clip
         self.simplify = float(simplify)
