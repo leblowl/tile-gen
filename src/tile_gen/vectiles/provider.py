@@ -23,25 +23,24 @@ def init(dbinfo):
 def get_tolerance(layer, coord):
     return layer.simplify * tolerances[coord.zoom]
 
+def st_bbox(bounds, padding, srid):
+    return 'ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, {srid})' \
+           .format(xmin=bounds[0] - padding,
+                   ymin=bounds[1] - padding,
+                   xmax=bounds[2] + padding,
+                   ymax=bounds[3] + padding,
+                   srid=srid)
+
 def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
     ''' Build and return an PostGIS query.
     '''
 
-    # bounds argument is a 4-tuple with (xmin, ymin, xmax, ymax).
-    bbox = 'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), ST_MakePoint(%.12f, %.12f))' % (bounds[0] - padding, bounds[1] - padding, bounds[2] + padding, bounds[3] + padding)
-    bbox = 'ST_SetSRID(%s, %d)' % (bbox, srid)
+    bbox = st_bbox(bounds, padding, srid)
     geom = 'q.__geometry__'
 
     if tolerance > 0:
         simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
-        simplification_bbox = (
-            'ST_MakeBox2D(ST_MakePoint(%.12f, %.12f), '
-            'ST_MakePoint(%.12f, %.12f))' % (
-                bounds[0] - simplification_padding,
-                bounds[1] - simplification_padding,
-                bounds[2] + simplification_padding,
-                bounds[3] + simplification_padding))
-        simplification_bbox = 'ST_SetSrid(%s, %d)' % (simplification_bbox, srid)
+        simplification_bbox = st_bbox(bounds, simplification_padding, srid)
 
         geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
         geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (geom, tolerance)
@@ -53,7 +52,8 @@ def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0
         geom = 'ST_Transform(%s, 4326)' % geom
 
     if scale:
-        # scale applies to the un-padded bounds, e.g. geometry in the padding area "spills over" past the scale range
+        # scale applies to the un-padded bounds
+        # e.g. geometry in the padding area "spills over" past the scale range
         geom = ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
                 % (geom, -bounds[0], -bounds[1],
                    scale / (bounds[2] - bounds[0]),
@@ -63,9 +63,7 @@ def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0
 
     return '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
               FROM (%(subquery)s) AS q
-              WHERE ST_IsValid(q.__geometry__)
-                AND ST_Intersects(q.__geometry__, %(bbox)s)''' \
-            % locals()
+              WHERE ST_Intersects(q.__geometry__, %(bbox)s)''' % locals()
 
 def query_features(query, geometry_types, transform_fn, sort_fn):
     features = []
