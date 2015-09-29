@@ -9,6 +9,7 @@ def get_module(env, template_name):
 queries_env = j2.Environment(loader=j2.PackageLoader('queries', ''))
 roads = get_module(queries_env, 'roads.jinja2').roads
 earth = get_module(queries_env, 'earth.jinja2').earth
+water = get_module(queries_env, 'water.jinja2').water
 
 set_config({"dbinfo": {"user": "zoonmaps",
                        "database": "gis"},
@@ -30,28 +31,18 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                  "transform_fns": [transform.add_id_to_properties,
                                                    transform.detect_osm_relation,
                                                    transform.remove_feature_id],
-                                 "sort_fn": sort.earth}}})
+                                 "sort_fn": sort.earth},
+                       "water": {"query_fn": water,
+                                 "simplify": 0,
+                                 "geometry_types": ["Polygon",
+                                                    "MultiPolygon",
+                                                    "LineString",
+                                                    "MultiLineString"],
+                                 "transform_fns": [transform.add_id_to_properties,
+                                                   transform.detect_osm_relation,
+                                                   transform.remove_feature_id],
+                                 "sort_fn": sort.water}}})
 
 tile = get_tile('all', 0, 0, 0, 'mvt')
 
 print(tile)
-
-'''
-                     "water": {"queries": [],
-                               "simplify": 0,
-                               "geometry_types": ["Polygon",
-                                                  "MultiPolygon",
-                                                  "LineString",
-                                                  "MultiLineString"],
-                               "transform_fns": [transform.add_id_to_properties,
-                                                 transform.detect_osm_relation,
-                                                 transform.remove_feature_id],
-                               "sort_fn": sort.water},
-
-                     "boundaries": {"queries": [],
-                                    "simplify": 0,
-                                    "geometry_types": ["LineString", "MultiLineString"],
-                                    "transform_fns": [transform.add_id_to_properties,
-                                                      transform.detect_osm_relation,
-                                                      transform.remove_feature_id]}
-'''
