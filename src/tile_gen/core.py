@@ -7,7 +7,7 @@ config = None
 
 def set_config(config_d):
     global config
-    config = c.build(config_d)
+    config = c.Config(config_d)
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
     if layer not in config.layers and layer != 'all': raise ValueError('Layer not found: ' + layer)

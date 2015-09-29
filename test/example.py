@@ -1,7 +1,7 @@
 import jinja2 as j2
 import tile_gen.vectiles.transform as transform
 import tile_gen.vectiles.sort as sort
-from tile_gen.core import set_config
+from tile_gen.core import set_config, get_tile
 
 def get_module(env, template_name):
     return env.get_template(template_name).module
@@ -31,6 +31,10 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                                    transform.detect_osm_relation,
                                                    transform.remove_feature_id],
                                  "sort_fn": sort.earth}}})
+
+tile = get_tile('all', 0, 0, 0, 'mvt')
+
+print(tile)
 
 '''
                      "water": {"queries": [],

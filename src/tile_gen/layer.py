@@ -2,22 +2,6 @@ import tile_gen.util as u
 import tile_gen.geography as geo
 from ModestMaps.Core import Coordinate
 
-def make_transform_fn(transform_fns):
-    if not transform_fns:
-        return None
-
-    def transform_fn(shape, properties, fid):
-        for fn in transform_fns:
-            shape, properties, fid = fn(shape, properties, fid)
-        return shape, properties, fid
-
-    return transform_fn
-
-def resolve_transform_fns(fn_dotted_names):
-    if not fn_dotted_names:
-        return None
-    return map(u.load_class_path, fn_dotted_names)
-
 class Layer:
     """ A Layer.
 
@@ -94,7 +78,5 @@ class Layer:
         self.clip = clip
         self.simplify = float(simplify)
         self.geometry_types = None if geometry_types is None else set(geometry_types)
-        self.transform_fn_names = transform_fns
-        self.transform_fn = make_transform_fn(resolve_transform_fns(transform_fns))
-        self.sort_fn_name = sort_fn
-        self.sort_fn = u.load_class_path(sort_fn) if sort_fn else None
+        self.transform_fn = u.compt(*transform_fns)
+        self.sort_fn = sort_fn

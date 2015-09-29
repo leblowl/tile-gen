@@ -25,7 +25,7 @@
 {% macro roads(zoom) -%}
    {% if zoom >= 15 %}
         {{ roads_select }} FROM roads_z15plus
-   {% if zoom >= 10 %}
+   {% elif zoom >= 10 %}
         {{ roads_select }} FROM {{ "roads_z" ~ zoom }}
    {% endif %}
 {%- endmacro %}

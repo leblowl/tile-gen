@@ -23,9 +23,10 @@ def build_cache(cache_d):
 def build_layer(name, layer_d): return layer.Layer(name, **layer_d)
 
 def build_layers(layers_d):
-    return map(lambda layer: build_layer(*layer), layers_d.items())
+    return {k: build_layer(k, v) for k, v in layers_d.iteritems()}
 
-def build(config_d):
-    return {'provider': provider.Provider(config_d.get('dbinfo', {})),
-            'cache':    build_cache(config_d.get('cache', {})),
-            'layers':   build_layers(config_d.get('layers', {}))}
+class Config:
+    def __init__(self, config_d):
+        self.provider = provider.Provider(config_d.get('dbinfo', {}))
+        self.cache    = build_cache(config_d.get('cache', {}))
+        self.layers   = build_layers(config_d.get('layers', {}))

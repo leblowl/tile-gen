@@ -139,10 +139,10 @@ class Provider:
         if type(lols) is list:
             def get_feature_layer(layer):
                 bounds = u.bounds(layer.projection, coord)
-                features = get_features(layer, coord, bounds, format)
+                features = self.get_features(layer, coord, bounds, format)
                 return {'name': layer.name, 'features': features}
 
-            merge(buff, lols, map(get_feature_layer, layers), coord, format)
+            merge(buff, lols, map(get_feature_layer, lols), coord, format)
         else:
             bounds = u.bounds(lols.projection, coord)
             features = self.get_features(lols, coord, bounds, format)

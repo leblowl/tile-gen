@@ -1,7 +1,7 @@
 import os
 import sys
 import __builtin__
-import functools
+from functools import reduce
 from sys import  modules
 
 def open(filename):
@@ -47,8 +47,11 @@ def bounds(projection, coord):
     ur = projection.coordinateProj(coord.right())
     return ll.x, ll.y, ur.x, ur.y
 
-def comp(*functions):
-    return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
+def comp(*fs):
+    return reduce(lambda f, g: lambda x: f(g(x)), fs)
+
+def compt(*fs):
+    return reduce(lambda f, g: lambda *x: f(*g(*x)), fs)
 
 def xs_get(xs, ndx, default):
     try:
@@ -56,11 +59,4 @@ def xs_get(xs, ndx, default):
     except IndexError:
         return default
 
-def get_in(m, ks): return reduce(dict.get, ks, m)
-
 def select_keys(m, ks): return { k: m.get(k) for k in ks if m.get(k) != None}
-
-def update(m, k, fn):
-    res = dict(m)
-    res[k] = fn(m[k])
-    return res
