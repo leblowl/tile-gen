@@ -32,6 +32,7 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                                    transform.detect_osm_relation,
                                                    transform.remove_feature_id],
                                  "sort_fn": sort.earth},
+
                        "water": {"query_fn": water,
                                  "simplify": 0,
                                  "geometry_types": ["Polygon",
