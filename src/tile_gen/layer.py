@@ -1,19 +1,9 @@
 import tile_gen.util as u
-import tile_gen.geography as geo
-from ModestMaps.Core import Coordinate
 
 class Layer:
     """ A Layer.
 
-        Required attributes:
-
-          config:
-            Configuration instance, see Config module.
-
-        Optional attributes:
-
-          projection:
-            Geographic projection, see Geography module.
+        Attributes:
 
           queries:
             Required list of Postgres queries, one for each zoom level. The
@@ -65,15 +55,14 @@ class Layer:
             Optional function that will be used to sort features
             fetched from the database.
     """
-    def __init__(self, name, projection='spherical mercator', queries=[],
-                 query_fn = None, srid=900913, dim=256, clip=True, simplify=1.0,
+    def __init__(self, name, queries=[], query_fn=None,
+                 srid=900913, dim=256, clip=True, simplify=0.0,
                  geometry_types=None, transform_fns=None, sort_fn=None):
 
         self.name = name
-        self.projection = geo.getProjectionByName(projection)
-        self.srid = int(srid)
         self.queries = map(u.read_query, queries)
         self.query_fn = query_fn
+        self.srid = int(srid)
         self.dim = dim
         self.clip = clip
         self.simplify = float(simplify)

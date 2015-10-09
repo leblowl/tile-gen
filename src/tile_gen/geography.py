@@ -1,49 +1,9 @@
-""" The geography bits of TileStache.
-
-A Projection defines the relationship between the rendered tiles and the
-underlying geographic data. Generally, just one popular projection is used
-for most web maps, "spherical mercator".
-
-Built-in projections:
-- spherical mercator
-- WGS84
-
-Example use projection in a layer definition:
-
-    "layer-name": {
-        "projection": "spherical mercator",
-        ...
-    }
-
-You can define your own projection, with a module and object name as arguments:
-
-    "layer-name": {
-        ...
-        "projection": "Module:Object"
-    }
-
-The object must include methods that convert between coordinates, points, and
-locations. See the included mercator and WGS84 implementations for example.
-You can also instantiate a projection class using this syntax:
-
-    "layer-name": {
-        ...
-        "projection": "Module:Object()"
-    }
-"""
-
 from ModestMaps.Core import Point, Coordinate
 from ModestMaps.Geo import deriveTransformation, MercatorProjection, LinearProjection, Location
 from math import log as _log, pi as _pi
-import tile_gen.core
-import tile_gen.config
 
 class SphericalMercator(MercatorProjection):
     """ Spherical mercator projection for most commonly-used web map tile scheme.
-
-        This projection is identified by the name "spherical mercator" in the
-        TileStache config. The simplified projection used here is described in
-        greater detail at: http://trac.openlayers.org/wiki/SphericalMercator
     """
     srs = '+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext +no_defs +over'
 
@@ -96,8 +56,6 @@ class SphericalMercator(MercatorProjection):
 
 class WGS84(LinearProjection):
     """ Unprojected projection for the other commonly-used web map tile scheme.
-
-        This projection is identified by the name "WGS84" in the TileStache config.
     """
     srs = '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'
 
@@ -129,19 +87,11 @@ class WGS84(LinearProjection):
         """
         return Location(point.y, point.x)
 
-def getProjectionByName(name):
-    """ Retrieve a projection object by name.
+projections = {3857: SphericalMercator(),
+               900913: SphericalMercator(),
+               4326: WGS84()}
 
-        Raise an exception if the name doesn't work out.
+def get_projection(srid):
+    """ Retrieve a projection object by srid.
     """
-    if name.lower() == 'spherical mercator':
-        return SphericalMercator()
-
-    elif name.lower() == 'wgs84':
-        return WGS84()
-
-    else:
-        try:
-            return Config.loadClassPath(name)
-        except Exception, e:
-            raise Exception('Failed projection in configuration: "%s" - %s' % (name, e))
+    return projections[srid]

@@ -33,3 +33,22 @@ def get_tile(layer, z, x, y, ext, ignore_cached = False):
         body = render_tile()
 
     return mimetype, body
+
+def query(layer, z, x, y, ext):
+    layer = config.layers[layer]
+    coord = Coordinate(y, x, z)
+    bounds = u.bounds(layer.projection, coord)
+    mimetype, format = u.get_type_by_ext(ext)
+
+    return config.provider.get_features(layer, coord, bounds, format)
+
+def get_query(layer, z, x, y, ext):
+    layer = config.layers[layer]
+    coord = Coordinate(y, x, z)
+    bounds = u.bounds(layer.projection, coord)
+    mimetype, format = u.get_type_by_ext(ext)
+
+    return provider.get_query(layer, coord, bounds, format)
+
+def explain_analyze_query(layer, z, x, y, ext):
+    query = 'explain analyze ' + get_query(layer, z, x, y, ext)

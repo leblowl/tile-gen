@@ -5,6 +5,7 @@ import tile_gen.vectiles.mvt as mvt
 import tile_gen.vectiles.geojson as geojson
 import tile_gen.vectiles.topojson as topojson
 from tile_gen.geography import SphericalMercator
+from ModestMaps.Core import Coordinate
 from StringIO import StringIO
 from math import pi
 from psycopg2.extras import RealDictCursor
@@ -15,38 +16,70 @@ tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
 
 def get_tolerance(layer, coord): return layer.simplify * tolerances[coord.zoom]
 
-def st_bbox(bounds, padding, srid):
+def pad(bounds, padding):
+    bounds[0] -= padding
+    bounds[1] -= padding
+    bounds[2] += padding
+    bounds[3] += padding
+
+    return bounds
+
+def st_bbox(bounds, srid):
     return 'ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, {srid})' \
-           .format(xmin=bounds[0] - padding,
-                   ymin=bounds[1] - padding,
-                   xmax=bounds[2] + padding,
-                   ymax=bounds[3] + padding,
+           .format(xmin=bounds[0],
+                   ymin=bounds[1],
+                   xmax=bounds[2],
+                   ymax=bounds[3],
                    srid=srid)
 
-def build_query(srid, subquery, bounds, tolerance, is_geo, is_clipped, padding=0, scale=None):
-    bbox = st_bbox(bounds, padding, srid)
-    geom = 'q.__geometry__'
+def st_simplify(geom, tolerance, bounds, srid=900913):
+    padding = (bounds[3] - bounds[1]) * 0.1
+    geom = 'ST_Intersection(%s, %s)' % (geom, st_bbox(pad(bounds, padding), srid))
 
-    if tolerance > 0:
-        simplification_padding = padding + (bounds[3] - bounds[1]) * 0.1
-        simplification_bbox = st_bbox(bounds, simplification_padding, srid)
-        geom = 'ST_Intersection(%s, %s)' % (geom, simplification_bbox)
-        geom = 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (geom, tolerance)
+    return 'ST_MakeValid(ST_SimplifyPreserveTopology(%s, %.12f))' % (geom, tolerance)
 
-    if is_clipped: geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
-    if is_geo: geom = 'ST_Transform(%s, 4326)' % geom
-    # scale applies to the un-padded bounds
-    # e.g. geometry in the padding area "spills over" past the scale range
-    if scale: geom = ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
-                      % (geom, -bounds[0], -bounds[1],
-                         scale / (bounds[2] - bounds[0]),
-                         scale / (bounds[3] - bounds[1])))
+def st_scale(geom, bounds, scale):
+    xmax = scale / (bounds[2] - bounds[0])
+    ymax = scale / (bounds[3] - bounds[1])
 
-    subquery = subquery.replace('!bbox!', bbox)
+    return ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
+            % (geom, -bounds[0], -bounds[1], xmax, ymax))
+
+def build_bbox_query(query, bounds, geom='q.__geometry__', srid=900913):
+    bbox = st_bbox(bounds, srid)
 
     return '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
-              FROM (%(subquery)s) AS q
-              WHERE ST_Intersects(q.__geometry__, %(bbox)s)''' % locals()
+              FROM (%(query)s) AS q
+              WHERE ST_Intersects(q.__geometry__, %(bbox)s)''' % {'geom': geom,
+                                                                  'query': query,
+                                                                  'bbox': bbox}
+
+def build_query(query, bounds, srid=900913, tolerance=0, is_geo=False, is_clipped=True, scale=4096):
+    bbox = st_bbox(bounds, srid)
+    geom = 'q.__geometry__'
+
+    if tolerance > 0: geom = st_simplify(geom, tolerance, bounds, srid)
+    if is_clipped: geom = 'ST_Intersection(%s, %s)' % (geom, bbox)
+    if is_geo: geom = 'ST_Transform(%s, 4326)' % geom
+    if scale: geom = st_scale(geom, bounds, scale)
+
+    return build_bbox_query(query, bounds, geom, srid)
+
+def get_query(layer, coord, bounds, format):
+    query = (layer.query_fn(coord.zoom)
+             if layer.query_fn
+             else u.xs_get(layer.queries, coord.zoom, layer.queries[-1]))
+
+    if not query: return None
+    else:
+        srid = layer.srid
+        tolerance = get_tolerance(layer, coord)
+        clip = layer.clip
+
+        # maybe keep geo in spherical mercator if possible to unify the building of queries
+        geo_query = build_query(query, bounds, srid, tolerance, True, clip)
+        mvt_query = build_query(query, bounds, srid, tolerance, False, clip)
+        return {'JSON': geo_query, 'TopoJSON': geo_query, 'MVT': mvt_query}[format]
 
 def encode(out, name, features, coord, bounds, format):
     if format == 'MVT':
@@ -83,7 +116,26 @@ class Provider:
         conn.set_session(readonly=True, autocommit=True)
         self.db = conn.cursor(cursor_factory=RealDictCursor)
 
-    def query_features(self, query, geometry_types, transform_fn, sort_fn):
+    def pr_query(self, query, z, x, y, srid=900913):
+        print(build_bbox_query(query, u.bounds(z, x, y, srid), 'q.__geometry__', srid))
+
+    def explain_analyze_query(self, query, z, x, y, srid=900913):
+        query = build_bbox_query(query, u.bounds(z, x, y, srid), 'q.__geometry__', srid)
+        query = 'EXPLAIN ANALYZE ' + query
+        self.db.execute(query)
+
+        return self.db.fetchall()
+
+    def query_bounds(self, query, bounds, srid=900913):
+        query = build_bbox_query(query, bounds, 'q.__geometry__', srid)
+        self.db.execute(query)
+
+        return self.db.fetchall()
+
+    def query_zxy(self, query, z, x, y, srid=900913):
+        return self.query_bounds(query, u.bounds(z, x, y, srid), srid)
+
+    def query(self, query, geometry_types, transform_fn, sort_fn):
         features = []
 
         self.db.execute(query)
@@ -113,38 +165,26 @@ class Provider:
         return features
 
     def get_features(self, layer, coord, bounds, format):
-        query = (layer.query_fn(coord.zoom)
-                 if layer.query_fn
-                 else u.xs_get(layer.queries, coord.zoom, layer.queries[-1]))
+        query = get_query(layer, coord, bounds, format)
+        geometry_types = layer.geometry_types
+        transform_fn = layer.transform_fn
+        sort_fn = layer.sort_fn
 
-        if not query: return []
-        else:
-            srid = layer.srid
-            tolerance = get_tolerance(layer, coord)
-            clip = layer.clip
-            mvt_padding = mvt.padding * tolerances[coord.zoom]
-
-            geo_query = build_query(srid, query, bounds, tolerance, True, clip)
-            mvt_query = build_query(srid, query, bounds, tolerance, False, clip, mvt_padding, mvt.extents)
-            queries = {'JSON': geo_query, 'TopoJSON': geo_query, 'MVT': mvt_query}
-            geometry_types = layer.geometry_types
-            transform_fn = layer.transform_fn
-            sort_fn = layer.sort_fn
-
-            return self.query_features(queries[format], geometry_types, transform_fn, sort_fn)
+        return ([] if not query
+                else self.query(query, geometry_types, transform_fn, sort_fn))
 
     def render_tile(self, lols, coord, format):
         buff = StringIO()
 
         if type(lols) is list:
             def get_feature_layer(layer):
-                bounds = u.bounds(layer.projection, coord)
+                bounds = u._bounds(coord, layer.srid)
                 features = self.get_features(layer, coord, bounds, format)
                 return {'name': layer.name, 'features': features}
 
             merge(buff, lols, map(get_feature_layer, lols), coord, format)
         else:
-            bounds = u.bounds(lols.projection, coord)
+            bounds = u._bounds(coord, lols.srid)
             features = self.get_features(lols, coord, bounds, format)
             encode(buff, lols.name, features, coord, bounds, format)
 

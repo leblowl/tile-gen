@@ -1,7 +1,7 @@
 import jinja2 as j2
 import tile_gen.vectiles.transform as transform
 import tile_gen.vectiles.sort as sort
-from tile_gen.core import set_config, get_tile
+from tile_gen.core import config, set_config, get_tile
 
 def get_module(env, template_name):
     return env.get_template(template_name).module
@@ -26,7 +26,6 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                  "sort_fn": sort.roads},
 
                        "earth": {"query_fn": earth,
-                                 "simplify": 0,
                                  "geometry_types": ["Polygon", "MultiPolygon"],
                                  "transform_fns": [transform.add_id_to_properties,
                                                    transform.detect_osm_relation,
@@ -34,7 +33,6 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                  "sort_fn": sort.earth},
 
                        "water": {"query_fn": water,
-                                 "simplify": 0,
                                  "geometry_types": ["Polygon",
                                                     "MultiPolygon",
                                                     "LineString",
@@ -44,6 +42,6 @@ set_config({"dbinfo": {"user": "zoonmaps",
                                                    transform.remove_feature_id],
                                  "sort_fn": sort.water}}})
 
-tile = get_tile('all', 0, 0, 0, 'mvt')
-
-print(tile)
+# get_tile('all', 0, 0, 0, 'mvt')
+# config.provider.query_bounds(water(0), [0, 0, 1, 1])
+# config.provider.query_zxy(water(0), 5, 12, 5)

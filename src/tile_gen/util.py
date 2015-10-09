@@ -1,8 +1,15 @@
 import os
 import sys
 import __builtin__
+import tile_gen.geography as geo
+import ModestMaps.Core as mm
+from pprint import PrettyPrinter
 from functools import reduce
 from sys import  modules
+
+def pprint(x):
+    pp = PrettyPrinter(indent=4)
+    pp.pprint(x)
 
 def open(filename):
     for path in sys.path:
@@ -42,10 +49,14 @@ def read_query(q):
             pass
     return q
 
-def bounds(projection, coord):
-    ll = projection.coordinateProj(coord.down())
-    ur = projection.coordinateProj(coord.right())
+def _bounds(coord, srid):
+    proj = geo.get_projection(srid)
+    ll = proj.coordinateProj(coord.down())
+    ur = proj.coordinateProj(coord.right())
     return ll.x, ll.y, ur.x, ur.y
+
+def bounds(z, x, y, srid):
+    return _bounds(mm.Coordinate(y, x, z), srid)
 
 def comp(*fs):
     return reduce(lambda f, g: lambda x: f(g(x)), fs)
