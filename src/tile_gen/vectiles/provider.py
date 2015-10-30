@@ -116,6 +116,15 @@ class Provider:
         conn.set_session(readonly=True, autocommit=True)
         self.db = conn.cursor(cursor_factory=RealDictCursor)
 
+    def query_bounds(self, query, bounds, srid=900913):
+        query = build_bbox_query(query, bounds, 'q.__geometry__', srid)
+        self.db.execute(query)
+
+        return self.db.fetchall()
+
+    def query_zxy(self, query, z, x, y, srid=900913):
+        return self.query_bounds(query, u.bounds(z, x, y, srid), srid)
+
     def pr_query(self, query, z, x, y, srid=900913):
         print(build_bbox_query(query, u.bounds(z, x, y, srid), 'q.__geometry__', srid))
 
@@ -125,15 +134,6 @@ class Provider:
         self.db.execute(query)
 
         return self.db.fetchall()
-
-    def query_bounds(self, query, bounds, srid=900913):
-        query = build_bbox_query(query, bounds, 'q.__geometry__', srid)
-        self.db.execute(query)
-
-        return self.db.fetchall()
-
-    def query_zxy(self, query, z, x, y, srid=900913):
-        return self.query_bounds(query, u.bounds(z, x, y, srid), srid)
 
     def query(self, query, geometry_types, transform_fn, sort_fn):
         features = []
