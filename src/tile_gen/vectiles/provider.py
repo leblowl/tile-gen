@@ -116,19 +116,19 @@ class Provider:
         conn.set_session(readonly=True, autocommit=True)
         self.db = conn.cursor(cursor_factory=RealDictCursor)
 
-    def query_bounds(self, query, bounds, srid=900913):
+    def query_bounds(self, query, bounds, srid=3857):
         query = build_bbox_query(query, bounds, 'q.__geometry__', srid)
         self.db.execute(query)
 
         return self.db.fetchall()
 
-    def query_zxy(self, query, z, x, y, srid=900913):
+    def query_zxy(self, query, z, x, y, srid=3857):
         return self.query_bounds(query, u.bounds(z, x, y, srid), srid)
 
-    def pr_query(self, query, z, x, y, srid=900913):
+    def pr_query(self, query, z, x, y, srid=3857):
         print(build_bbox_query(query, u.bounds(z, x, y, srid), 'q.__geometry__', srid))
 
-    def explain_analyze_query(self, query, z, x, y, srid=900913):
+    def explain_analyze_query(self, query, z, x, y, srid=3857):
         query = build_bbox_query(query, u.bounds(z, x, y, srid), 'q.__geometry__', srid)
         query = 'EXPLAIN ANALYZE ' + query
         self.db.execute(query)

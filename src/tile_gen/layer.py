@@ -56,7 +56,7 @@ class Layer:
             fetched from the database.
     """
     def __init__(self, name, queries=[], query_fn=None,
-                 srid=900913, dim=256, clip=True, simplify=0.0,
+                 srid=3857, dim=256, clip=True, simplify=0.0,
                  geometry_types=None, transform_fns=None, sort_fn=None):
 
         self.name = name
