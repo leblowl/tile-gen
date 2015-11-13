@@ -33,7 +33,7 @@ pip install -e .
 ```shell
 python setup.py repl
 >>> execfile('test/example.py')
->>> get_tile('all', 0, 0, 0, 'mvt')
->>> config.provider.query_zxy("select way as __geometry__ from osm_roads_z5", 5, 5, 12)
->>> config.provider.explain_analyze_query("select way as __geometry__ from osm_roads_z5", 5, 5, 12)
+>>> core.get_tile('all', 0, 0, 0, 'mvt')
+>>> core.env.provider.query_zxy("select way as __geometry__ from osm_roads_z5", 5, 5, 12)
+>>> core.env.provider.explain_analyze_query("select way as __geometry__ from osm_roads_z5", 5, 5, 12)
 ```
