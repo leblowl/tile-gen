@@ -12,17 +12,15 @@ from psycopg2.extras import RealDictCursor
 from psycopg2 import connect
 from ModestMaps.Core import Point
 
-tolerances = [6378137 * 2 * pi / (2 ** (zoom + 8)) for zoom in range(22)]
-
-def get_tolerance(layer, coord): return layer.simplify * tolerances[coord.zoom]
+def get_tolerance(simplify, zoom):
+    return (simplify[max(filter(lambda k : k <= zoom, simplify.keys()))]
+            if isinstance(simplify, dict) else simplify)
 
 def pad(bounds, padding):
-    bounds[0] -= padding
-    bounds[1] -= padding
-    bounds[2] += padding
-    bounds[3] += padding
-
-    return bounds
+    return (bounds[0] - padding,
+            bounds[1] - padding,
+            bounds[2] + padding,
+            bounds[3] + padding)
 
 def st_bbox(bounds, srid):
     return 'ST_MakeEnvelope({xmin}, {ymin}, {xmax}, {ymax}, {srid})' \
@@ -32,7 +30,7 @@ def st_bbox(bounds, srid):
                    ymax=bounds[3],
                    srid=srid)
 
-def st_simplify(geom, tolerance, bounds, srid=900913):
+def st_simplify(geom, tolerance, bounds, srid=3857):
     padding = (bounds[3] - bounds[1]) * 0.1
     geom = 'ST_Intersection(%s, %s)' % (geom, st_bbox(pad(bounds, padding), srid))
 
@@ -45,7 +43,7 @@ def st_scale(geom, bounds, scale):
     return ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
             % (geom, -bounds[0], -bounds[1], xmax, ymax))
 
-def build_bbox_query(query, bounds, geom='q.__geometry__', srid=900913):
+def build_bbox_query(query, bounds, geom='q.__geometry__', srid=3857):
     bbox = st_bbox(bounds, srid)
 
     return '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
@@ -54,7 +52,7 @@ def build_bbox_query(query, bounds, geom='q.__geometry__', srid=900913):
                                                                   'query': query,
                                                                   'bbox': bbox}
 
-def build_query(query, bounds, srid=900913, tolerance=0, is_geo=False, is_clipped=True, scale=4096):
+def build_query(query, bounds, srid=3857, tolerance=0, is_geo=False, is_clipped=True, scale=4096):
     bbox = st_bbox(bounds, srid)
     geom = 'q.__geometry__'
 
@@ -73,7 +71,7 @@ def get_query(layer, coord, bounds, format):
     if not query: return None
     else:
         srid = layer.srid
-        tolerance = get_tolerance(layer, coord)
+        tolerance = get_tolerance(layer.simplify, coord.zoom)
         clip = layer.clip
 
         # maybe keep geo in spherical mercator if possible to unify the building of queries

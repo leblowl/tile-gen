@@ -65,7 +65,7 @@ class Layer:
         self.srid = int(srid)
         self.dim = dim
         self.clip = clip
-        self.simplify = float(simplify)
+        self.simplify = dict(simplify) if isinstance(simplify, list) else float(simplify)
         self.geometry_types = None if geometry_types is None else set(geometry_types)
         self.transform_fn = u.compt(*transform_fns)
         self.sort_fn = sort_fn
