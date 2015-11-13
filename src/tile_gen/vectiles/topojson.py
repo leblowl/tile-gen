@@ -179,3 +179,10 @@ def merge(file, names, inputs):
                 update_arc_indexes(geometry, output['arcs'], input['arcs'])
 
     json.dump(output, file, separators=(',', ':'))
+
+
+## USAGE ##
+#        ll = SphericalMercator().projLocation(Point(*bounds[0:2]))
+#        ur = SphericalMercator().projLocation(Point(*bounds[2:4]))
+#        topojson.encode(out, features, (ll.lon, ll.lat, ur.lon, ur.lat))
+###########

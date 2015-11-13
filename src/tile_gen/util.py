@@ -32,9 +32,6 @@ def get_type_by_ext(ext):
     if ext.lower() == 'json':
         return 'application/json', 'JSON'
 
-    elif ext.lower() == 'topojson':
-        return 'application/json', 'TopoJSON'
-
     elif ext.lower() == 'mvt':
         return 'application/x-protobuf', 'MVT'
 

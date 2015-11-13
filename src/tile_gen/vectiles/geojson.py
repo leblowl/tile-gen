@@ -1,11 +1,8 @@
 from re import compile
 from math import pi, log, tan, ceil
-
 import json
-
 from shapely.wkb import loads
 from shapely.geometry import asShape
-
 from .ops import transform
 
 float_pat = compile(r'^-?\d+\.\d+(e-?\d+)?$')
@@ -21,10 +18,29 @@ def mercator((x, y)):
     y = log(tan(0.25 * pi + 0.5 * y))
     return 6378137 * x, 6378137 * y
 
+def write_to_file(file, geojson, zoom):
+    ''' Write GeoJSON stream to a file
+
+        Floating point precision in the output is truncated to six digits.
+    '''
+    encoder = json.JSONEncoder(separators=(',', ':'))
+    encoded = encoder.iterencode(geojson)
+    flt_fmt = '%%.%df' % precisions[zoom]
+
+    for token in encoded:
+        if charfloat_pat.match(token):
+            # in python 2.7, we see a character followed by a float literal
+            file.write(token[0] + flt_fmt % float(token[1:]))
+
+        elif float_pat.match(token):
+            # in python 2.6, we see a simple float literal
+            file.write(flt_fmt % float(token))
+
+        else:
+            file.write(token)
+
 def decode(file):
     ''' Decode a GeoJSON file into a list of (WKB, property dict) features.
-
-        Result can be passed directly to mapnik.PythonDatasource.wkb_features().
     '''
     data = json.load(file)
     features = []
@@ -42,52 +58,25 @@ def decode(file):
 
     return features
 
-def encode(file, features, zoom):
-    ''' Encode a list of (WKB, property dict, id) features into a GeoJSON stream.
-
-        If no id is available, pass in None
-
-        Geometries in the features list are assumed to be unprojected lon, lats.
-        Floating point precision in the output is truncated to six digits.
-    '''
-    fs = []
+def get_feature_layer(features):
+    _features = []
     for feature in features:
-        assert len(feature) == 3
         wkb, props, fid = feature
-        f = dict(type='Feature', properties=props,
-                 geometry=loads(wkb).__geo_interface__)
-        if fid is not None:
-            f['id'] = fid
-        fs.append(f)
+        _features.append({
+            'id': fid,
+            'type': 'Feature',
+            'properties': props,
+            'geometry': loads(wkb).__geo_interface__
+        })
 
-    geojson = dict(type='FeatureCollection', features=fs)
+    return {'type': 'FeatureCollection',
+            'features': _features}
 
-    write_to_file(file, geojson, zoom)
+def encode(file, features, zoom):
+    layer = get_feature_layer(features)
+    write_to_file(file, layer, zoom)
 
-def merge(file, names, tiles, zoom):
-    ''' Retrieve a list of GeoJSON tile responses and merge them into one.
-
-        get_tiles() retrieves data and performs basic integrity checks.
-    '''
-    output = dict(zip(names, tiles))
-    write_to_file(file, output, zoom)
-
-def write_to_file(file, geojson, zoom):
-    ''' Write GeoJSON stream to a file
-
-    '''
-    encoder = json.JSONEncoder(separators=(',', ':'))
-    encoded = encoder.iterencode(geojson)
-    flt_fmt = '%%.%df' % precisions[zoom]
-
-    for token in encoded:
-        if charfloat_pat.match(token):
-            # in python 2.7, we see a character followed by a float literal
-            file.write(token[0] + flt_fmt % float(token[1:]))
-
-        elif float_pat.match(token):
-            # in python 2.6, we see a simple float literal
-            file.write(flt_fmt % float(token))
-
-        else:
-            file.write(token)
+def merge(file, feature_layers, zoom):
+    layers = {x['name']: get_feature_layer(x['features'])
+              for x in feature_layers}
+    write_to_file(file, layers, zoom)

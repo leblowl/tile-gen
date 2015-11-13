@@ -14,9 +14,9 @@ def get_feature_layer(name, features):
     for feature in features:
         wkb, props, fid = feature
         _features.append({
-            'geometry': wkb,
-            'properties': props,
             'id': fid,
+            'properties': props,
+            'geometry': wkb
         })
 
     return {

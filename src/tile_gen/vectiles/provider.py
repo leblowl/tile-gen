@@ -3,7 +3,6 @@ import shapely.wkb
 import tile_gen.util as u
 import tile_gen.vectiles.mvt as mvt
 import tile_gen.vectiles.geojson as geojson
-import tile_gen.vectiles.topojson as topojson
 from tile_gen.geography import SphericalMercator
 from ModestMaps.Core import Coordinate
 from StringIO import StringIO
@@ -74,39 +73,25 @@ def get_query(layer, coord, bounds, format):
         tolerance = get_tolerance(layer.simplify, coord.zoom)
         clip = layer.clip
 
-        # maybe keep geo in spherical mercator if possible to unify the building of queries
         geo_query = build_query(query, bounds, srid, tolerance, True, clip)
         mvt_query = build_query(query, bounds, srid, tolerance, False, clip)
-        return {'JSON': geo_query, 'TopoJSON': geo_query, 'MVT': mvt_query}[format]
+        return {'JSON': geo_query, 'MVT': mvt_query}[format]
 
 def encode(out, name, features, coord, bounds, format):
     if format == 'MVT':
         mvt.encode(out, name, features)
-
     elif format == 'JSON':
         geojson.encode(out, features, coord.zoom)
-
-    elif format == 'TopoJSON':
-        ll = SphericalMercator().projLocation(Point(*bounds[0:2]))
-        ur = SphericalMercator().projLocation(Point(*bounds[2:4]))
-        topojson.encode(out, features, (ll.lon, ll.lat, ur.lon, ur.lat))
-
     else:
-        raise ValueError(format + " is not supported")
+        raise ValueError(format + ' is not supported')
 
-def merge(out, layers, feature_layers, coord, format):
+def merge(out, feature_layers, coord, format):
     if format == 'MVT':
         mvt.merge(out, feature_layers)
+    elif format == 'JSON':
+        geojson.merge(out, feature_layers, coord.zoom)
     else:
-        names = map(lambda x : x.name, layers)
-        tiles = map(lambda x : json.loads(render_tile(x, coord, format)), layers)
-
-        if format == 'TopoJSON':
-            topojson.merge(out, names, tiles)
-        elif format == 'JSON':
-            geojson.merge(out, names, tiles, coord.zoom)
-        else:
-            raise ValueError(format + " is not supported for responses with multiple layers")
+        raise ValueError(format + ' is not supported')
 
 class Provider:
     def __init__(self, dbinfo):
@@ -171,16 +156,18 @@ class Provider:
         return ([] if not query
                 else self.query(query, geometry_types, transform_fn, sort_fn))
 
+    def get_feature_layer(self, layer, coord, format):
+        bounds = u._bounds(coord, layer.srid)
+        features = self.get_features(layer, coord, bounds, format)
+        return {'name': layer.name, 'features': features}
+
     def render_tile(self, lols, coord, format):
         buff = StringIO()
 
         if type(lols) is list:
-            def get_feature_layer(layer):
-                bounds = u._bounds(coord, layer.srid)
-                features = self.get_features(layer, coord, bounds, format)
-                return {'name': layer.name, 'features': features}
-
-            merge(buff, lols, map(get_feature_layer, lols), coord, format)
+            get_feature_layer = lambda l : self.get_feature_layer(l, coord, format)
+            feature_layers = map(get_feature_layer, lols)
+            merge(buff, feature_layers, coord, format)
         else:
             bounds = u._bounds(coord, lols.srid)
             features = self.get_features(lols, coord, bounds, format)
