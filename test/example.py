@@ -12,7 +12,7 @@ earth = get_module(queries_env, 'earth.jinja2').earth
 water = get_module(queries_env, 'water.jinja2').water
 
 core.init_env({"dbinfo": {"user": "zoonmaps",
-                     "database": "gis"},
+                          "database": "gis"},
                "layers": {"roads": {"query_fn": roads,
                                     "geometry_types": ["LineString", "MultiLineString"],
                                     "transform_fns": [transform.add_id_to_properties,
