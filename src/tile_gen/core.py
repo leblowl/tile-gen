@@ -3,18 +3,18 @@ from functools import partial
 import tile_gen.util as u
 import tile_gen.config as c
 
-config = None
+env = None
 
-def set_config(config_d):
-    global config
-    config = c.Config(config_d)
+def init_env(config_d):
+    global env
+    env = c.Config(config_d)
 
 def get_tile(layer, z, x, y, ext, ignore_cached = False):
-    if layer not in config.layers and layer != 'all': raise ValueError('Layer not found: ' + layer)
+    if layer not in env.layers and layer != 'all': raise ValueError('Layer not found: ' + layer)
 
-    provider = config.provider
-    cache    = config.cache
-    layers   = config.layers.values() if layer == 'all' else [config.layers[layer]]
+    provider = env.provider
+    cache    = env.cache
+    layers   = env.layers.values() if layer == 'all' else [env.layers[layer]]
     coord    = Coordinate(y, x, z)
     mimetype, format = u.get_type_by_ext(ext)
     render_tile = partial(provider.render_tile, layers, coord, format)
@@ -35,20 +35,20 @@ def get_tile(layer, z, x, y, ext, ignore_cached = False):
     return mimetype, body
 
 def query(layer, z, x, y, ext):
-    layer = config.layers[layer]
+    layer = env.layers[layer]
     coord = Coordinate(y, x, z)
     bounds = u.bounds(layer.projection, coord)
     mimetype, format = u.get_type_by_ext(ext)
 
-    return config.provider.get_features(layer, coord, bounds, format)
+    return env.provider.get_features(layer, coord, bounds, format)
 
 def get_query(layer, z, x, y, ext):
-    layer = config.layers[layer]
+    layer = env.layers[layer]
     coord = Coordinate(y, x, z)
     bounds = u.bounds(layer.projection, coord)
     mimetype, format = u.get_type_by_ext(ext)
 
-    return provider.get_query(layer, coord, bounds, format)
+    return env.provider.get_query(layer, coord, bounds, format)
 
 def explain_analyze_query(layer, z, x, y, ext):
     query = 'explain analyze ' + get_query(layer, z, x, y, ext)
