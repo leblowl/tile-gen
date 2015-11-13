@@ -9,7 +9,7 @@ pip install git+https://github.com/leblowl/tile-gen#egg=tile-gen
 ```
 ## Data Preparation
 ##### Postgresql, Planet.osm, & [zoondka/vector-datasource](https://github.com/zoondka/vector-datasource) example
-```
+```shell
 wget http://ftp5.gwdg.de/pub/misc/openstreetmap/planet.openstreetmap.org/pbf/planet-latest.osm.pbf
 
 osmconvert planet-latest.osm.pbf -o=planet-latest.o5m
