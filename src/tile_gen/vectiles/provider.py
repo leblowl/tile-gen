@@ -42,14 +42,17 @@ def st_scale(geom, bounds, scale):
     return ('ST_TransScale(%s, %.12f, %.12f, %.12f, %.12f)'
             % (geom, -bounds[0], -bounds[1], xmax, ymax))
 
-def build_bbox_query(query, bounds, geom='q.__geometry__', srid=3857):
+def build_bbox_query(subquery, bounds, geom='q.__geometry__', srid=3857):
+    query = '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
+               FROM (%(query)s) AS q''' % {'geom': geom,
+                                           'query': subquery}
+    default_bbox_filter = ' WHERE ST_Intersects(q.__geometry__, %(bbox)s)'
+    bbox_token = '!bbox!'
     bbox = st_bbox(bounds, srid)
 
-    return '''SELECT *, ST_AsBinary(%(geom)s) AS __geometry__
-              FROM (%(query)s) AS q
-              WHERE ST_Intersects(q.__geometry__, %(bbox)s)''' % {'geom': geom,
-                                                                  'query': query,
-                                                                  'bbox': bbox}
+    return (query.replace(bbox_token, bbox)
+            if bbox_token in query
+            else query + default_bbox_filter % {'bbox': bbox})
 
 def build_query(query, bounds, srid=3857, tolerance=0, is_geo=False, is_clipped=True, scale=4096):
     bbox = st_bbox(bounds, srid)

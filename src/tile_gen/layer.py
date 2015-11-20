@@ -10,23 +10,16 @@ class Layer:
             last query in the list is repeated for higher zoom levels, and null
             queries indicate an empty response.
 
-            Query must use "__geometry__" for a column name, and must be in
-            spherical mercator (900913) projection. A query may include an
+            Query must use "__geometry__" for a column name. A query may include an
             "__id__" column, which will be used as a feature ID in GeoJSON
-            instead of a dynamically-generated hash of the geometry. A query
-            can additionally be a file name or URL, interpreted relative to
-            the location of the TileStache config file.
+            instead of a dynamically-generated hash of the geometry.
 
-            If the query contains the token "!bbox!", it will be replaced with
-            a constant bounding box geomtry like this:
-            "ST_SetSRID(ST_MakeBox2D(ST_MakePoint(x, y), ST_MakePoint(x, y)), <srid>)"
-
-            This behavior is modeled on Mapnik's similar bbox token feature:
-            https://github.com/mapnik/mapnik/wiki/PostGIS#bbox-token
+          query-fn:
+            A function of zoom level that returns a query
 
           srid:
-            Optional numeric SRID used by PostGIS for spherical mercator.
-            Default 900913.
+            Optional numeric SRID used by PostGIS.
+            Default 3857.
 
           dim:
             Height & width of square tile in pixels, as a single integer.
@@ -36,9 +29,14 @@ class Layer:
             tile boundaries or returned in full. Default true: clip geometries.
 
           simplify:
-            Optional floating point number of pixels to simplify all geometries.
-            Useful for creating double resolution (retina) tiles set to 0.5, or
-            set to 0.0 to prevent any simplification. Default 1.0.
+            Optional tolerance(s) for simplifying geometries with PostGIS's
+            ST_SimplifyPreserveTopology. Accepts float or array
+            of key-value pairs, ex: [[1, 50], [4, 25]], where the keys indicate
+            the zoom levels and the values indicate tolerances.
+            If a key isn't present, it will search
+            for one lesser than or equal to the zoom level requested. If a float
+            is supplied, it will use that tolerance for all zoom levels.
+            Default: 0.0.
 
           geometry_types:
             Optional list of geometry types that constrains the results of what
